@@ -1,0 +1,111 @@
+{
+	"name": "PL_Load_FACT",
+	"properties": {
+		"activities": [
+			{
+				"name": "FactWorkFLow",
+				"type": "Script",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "INSERT INTO dbo.FactWorkflow (\n    WorkflowId,\n    MemberSK,\n    PolicySK,\n    CreatedOn,\n    LoadDate\n)\nSELECT\n    stag.WorkflowId,\n    member.DimMemberSK,\n    policy.DimPolicySK,\n    stag.CreatedOn,\n    GETUTCDATE()\nFROM (\n    SELECT DISTINCT \n        w.WorkflowId,\n        mwl.MemberId,\n        mwl.PolicyId,\n        w.CreatedOn\n    FROM stg.Workflow w\n    JOIN stg.MemberWorkflowLog mwl ON w.WorkflowId = mwl.WorkflowId\n    JOIN stg.Policy p ON p.PolicyId = mwl.PolicyId\n) stag\n\n-- Match Member at point-in-time\nJOIN dbo.DimMember member \n    ON stag.MemberId = member.MemberId \n    AND stag.CreatedOn BETWEEN member.ValidFrom AND ISNULL(member.ValidTo, '9999-12-31')\n    AND member.IsActive = 1\n\n-- Match Policy at point-in-time\nJOIN dbo.DimPolicy policy \n    ON stag.PolicyId = policy.PolicyId \n    AND stag.CreatedOn BETWEEN policy.ValidFrom AND ISNULL(policy.ValidTo, '9999-12-31')\n    AND policy.IsActive = 1\n\n-- Prevent duplicates\nWHERE NOT EXISTS (\n    SELECT 1 \n    FROM dbo.FactWorkflow f \n    WHERE f.WorkflowId = stag.WorkflowId\n);\n",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "FactMedicalClaim",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "FactWorkFLow",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "INSERT INTO dbo.FactMedicalClaim (\n    MedicalClaimId,\n    MemberSK,\n    InsurerClaimNumber,\n    InternalClaimNumber,\n    AmountClaimed,\n    PaymentTypeId,\n    AmountSettled,\n    DateReceived,\n    MedicalClaimStatusId,\n    AmountReAssessed,\n    SettlementDate,\n    LoadDate\n)\nSELECT \n    stg.MedicalClaimId,\n    dm.DimMemberSK,\n    stg.InsurerClaimNumber,\n    stg.InternalClaimNumber,\n    stg.AmountClaimed,\n    stg.PaymentTypeId,\n    stg.AmountSettled,\n    stg.DateReceived,\n    stg.MedicalClaimStatusId,\n    stg.AmountReAssessed,\n    stg.SettlementDate,\n    GETUTCDATE()\nFROM stg.MedicalClaim stg\nJOIN dbo.DimMember dm\n    ON stg.MemberId = dm.MemberId \n    AND stg.DateReceived BETWEEN dm.ValidFrom AND ISNULL(dm.ValidTo, '9999-12-31')\n    AND dm.IsActive = 1\nWHERE NOT EXISTS (\n    SELECT 1 \n    FROM dbo.FactMedicalClaim fc \n    WHERE fc.MedicalClaimId = stg.MedicalClaimId\n);\n",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "FactPolicy",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "FactMedicalClaim",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "INSERT INTO dbo.FactPolicy (\n    PolicySK,\n    ClientSK,\n    CarrierSK,\n    Country,\n    CategoryName,\n    Product,\n    BaseCurrencyName,\n    Premium,\n    Commission,\n    Fee,\n    ClientFee,\n    MembersCount,\n    ActiveMembers,\n    ActiveEmployees,\n    TotalBasmahFee,\n    PolicyStartDate,\n    PolicyEndDate,\n    CommissionPercent,\n    LoadDate\n)\nSELECT \n    p.DimPolicySK AS PolicyId,\n    client.DimClientSK,\n    carrier.DimCarrierSK,\n    sp.Country,\n    sp.CategoryName,\n    sp.Product,\n    sp.BaseCurrencyName,\n    sp.Premium,\n    sp.Commission,\n    sp.Fee,\n    sp.ClientFee,\n    sp.MembersCount,\n    sp.ActiveMembers,\n    sp.ActiveEmployes,\n    sp.TotalBasmahFee,\n    sp.PolicyStartDate,\n    sp.PolicyEndDate,\n    sp.CommissionPercent,\n    GETUTCDATE() AS LoadDate\n\nFROM stg.spPolicy sp\nJOIN stg.Policy pol ON sp.PolicyId = pol.PolicyId\nJOIN dbo.DimPolicy p ON sp.PolicyId = p.PolicyId\nJOIN dbo.DimClient client ON pol.ClientId = client.ClientId AND client.IsActive = 1\nJOIN dbo.DimCarrier carrier ON pol.CarrierId = carrier.CarrierId AND carrier.IsActive = 1\n\n-- Only insert if no matching row with same data exists\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM dbo.FactPolicy fp\n    WHERE fp.PolicySK = p.DimPolicySK\n      AND ISNULL(fp.ClientSK, -1) = ISNULL(client.DimClientSK, -1)\n      AND ISNULL(fp.CarrierSK, -1) = ISNULL(carrier.DimCarrierSK, -1)\n      AND ISNULL(fp.Country, '') = ISNULL(sp.Country, '')\n      AND ISNULL(fp.CategoryName, '') = ISNULL(sp.CategoryName, '')\n      AND ISNULL(fp.Product, '') = ISNULL(sp.Product, '')\n      AND ISNULL(fp.BaseCurrencyName, '') = ISNULL(sp.BaseCurrencyName, '')\n      AND ISNULL(fp.Premium, -1) = ISNULL(sp.Premium, -1)\n      AND ISNULL(fp.Commission, -1) = ISNULL(sp.Commission, -1)\n      AND ISNULL(fp.Fee, -1) = ISNULL(sp.Fee, -1)\n      AND ISNULL(fp.ClientFee, -1) = ISNULL(sp.ClientFee, -1)\n      AND ISNULL(fp.MembersCount, -1) = ISNULL(sp.MembersCount, -1)\n      AND ISNULL(fp.ActiveMembers, -1) = ISNULL(sp.ActiveMembers, -1)\n      AND ISNULL(fp.ActiveEmployees, -1) = ISNULL(sp.ActiveEmployes, -1)\n      AND ISNULL(fp.TotalBasmahFee, -1) = ISNULL(sp.TotalBasmahFee, -1)\n      AND ISNULL(fp.PolicyStartDate, '1900-01-01') = ISNULL(sp.PolicyStartDate, '1900-01-01')\n      AND ISNULL(fp.PolicyEndDate, '1900-01-01') = ISNULL(sp.PolicyEndDate, '1900-01-01')\n      AND ISNULL(fp.CommissionPercent, -1) = ISNULL(sp.CommissionPercent, -1)\n);",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2025-04-14T13:21:24Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

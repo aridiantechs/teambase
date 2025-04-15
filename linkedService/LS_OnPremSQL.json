@@ -1,0 +1,21 @@
+{
+	"name": "LS_OnPremSQL",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"annotations": [],
+		"type": "SqlServer",
+		"typeProperties": {
+			"server": "DESKTOP-BO7RKUV",
+			"database": "DemoWillis_2025-03-10_12-20",
+			"encrypt": "optional",
+			"trustServerCertificate": false,
+			"authenticationType": "SQL",
+			"userName": "tayyab",
+			"encryptedCredential": "eyJDcmVkZW50aWFsSWQiOiJiMThmYjFhZi1kN2ZmLTQ0MjYtODM1My05MjFkOTExMTI5YTgiLCJWZXJzaW9uIjoiMi4wIiwiQ2xhc3NUeXBlIjoiTWljcm9zb2Z0LkRhdGFQcm94eS5Db3JlLkludGVyU2VydmljZURhdGFDb250cmFjdC5DcmVkZW50aWFsU1UwNkNZMTQifQ=="
+		},
+		"connectVia": {
+			"referenceName": "IR-OnPrem",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

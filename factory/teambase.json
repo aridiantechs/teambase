@@ -1,0 +1,9 @@
+{
+	"name": "teambase",
+	"location": "uaenorth",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "ae2b17ce-7e73-4164-9b53-32de872d0086",
+		"tenantId": "446b461d-ceb4-4262-86ec-686017be995b"
+	}
+}

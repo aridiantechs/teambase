@@ -1,0 +1,147 @@
+{
+	"name": "PL_Load_DW_Dim",
+	"properties": {
+		"activities": [
+			{
+				"name": "Dim_Policy",
+				"type": "Script",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "\nUPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = SYSUTCDATETIME()\nFROM dbo.DimPolicy dim\nJOIN stg.Policy stg \n    ON dim.PolicyId = stg.PolicyId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Number, '') <> ISNULL(stg.Number, '') OR\n      ISNULL(dim.PolicySegment, '') <> ISNULL(stg.PolicySegmentId, '') OR\n      ISNULL(dim.PolicyType, '') <> ISNULL(stg.PolicyTypeId, '') OR\n      ISNULL(dim.RefundType, '') <> ISNULL(stg.RefundProtocol, '') OR\n      ISNULL(dim.PremiumFrequency, '') <> ISNULL(stg.PremiumFrequencyID, '')\n  );\n\n  \nINSERT INTO dbo.DimPolicy (\n    PolicyId,\n    Name,\n    Number,\n    PolicySegment,\n    PolicyType,\n    RefundType,\n    PremiumFrequency,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.PolicyId,\n    stg.Name,\n    stg.Number,\n    stg.PolicySegmentId,\n    stg.PolicyTypeId,\n    stg.RefundProtocol,\n    stg.PremiumFrequencyId,\n    stg.CreatedOn,       -- 👈 Use source-created date as ValidFrom\n    NULL,                -- ValidTo open\n    1,                   -- IsActive\n    SYSUTCDATETIME()     -- LoadDate (when loaded into warehouse)\nFROM stg.Policy stg\nLEFT JOIN dbo.DimPolicy dim \n    ON dim.PolicyId = stg.PolicyId AND dim.IsActive = 1\nWHERE dim.PolicyId IS NULL\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Number, '') <> ISNULL(stg.Number, '') OR\n        ISNULL(dim.PolicySegment, '') <> ISNULL(stg.PolicySegmentId, '') OR\n        ISNULL(dim.PolicyType, '') <> ISNULL(stg.PolicyTypeId, '') OR\n        ISNULL(dim.RefundType, '') <> ISNULL(stg.RefundProtocol, '') OR\n        ISNULL(dim.PremiumFrequency, '') <> ISNULL(stg.PremiumFrequencyId, '')\n    );\n",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "DimCarrier",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "Dim_Policy",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimCarrier dim\nJOIN stg.Carrier stg \n    ON dim.CarrierId = stg.CarrierId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n      ISNULL(dim.CustomerCareEmail, '') <> ISNULL(stg.CustomerCareEmail, '') OR\n      ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1)\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimCarrier (\n    CarrierId,\n    Name,\n    Code,\n    CustomerCareEmail,\n    AddressId,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.CarrierId,\n    stg.Name,\n    stg.Code,\n    stg.CustomerCareEmail,\n    stg.AddressId,\n    CreatedOn,  -- ValidFrom = ETL load time (or use source.CreatedOn if available)\n    NULL,               -- ValidTo open for active records\n    1,                  -- IsActive\n    GETUTCDATE()    -- LoadDate\nFROM stg.Carrier stg\nLEFT JOIN dbo.DimCarrier dim \n    ON dim.CarrierId = stg.CarrierId AND dim.IsActive = 1\nWHERE dim.CarrierId IS NULL  -- New records\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n        ISNULL(dim.CustomerCareEmail, '') <> ISNULL(stg.CustomerCareEmail, '') OR\n        ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1)\n    );  ",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "DimClient",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "DimCarrier",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimClient dim\nJOIN stg.Client stg \n    ON dim.ClientId = stg.ClientId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n      ISNULL(dim.ClientSegment, '') <> ISNULL(stg.ClientSegmentId, '') OR  -- Compare NAMES, not IDs!\n      ISNULL(dim.Industry, '') <> ISNULL(stg.IndustryId, '') OR\n      ISNULL(dim.ClientType, '') <> ISNULL(stg.ClientTypeId, '') OR\n      ISNULL(dim.SalesPerson, '') <> ISNULL(stg.SalesPerson, '')\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimClient (\n    ClientId,\n    Name,\n    Code,\n    ClientSegment,\n    Industry,\n    ClientType,\n    SalesPerson,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.ClientId,\n    stg.Name,\n    stg.Code,\n    stg.ClientSegmentId,\n    stg.IndustryId,\n    stg.ClientTypeId,\n    stg.SalesPerson,\n    stg.CreatedOn,  -- Use source.CreatedOn if available\n    NULL,               -- ValidTo = NULL for active records\n    1,                  -- IsActive\n    GETUTCDATE()    -- LoadDate\nFROM stg.Client stg\nLEFT JOIN dbo.DimClient dim \n    ON dim.ClientId = stg.ClientId AND dim.IsActive = 1\nWHERE dim.ClientId IS NULL  -- New records\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n        ISNULL(dim.ClientSegment, '') <> ISNULL(stg.ClientSegmentId, '') OR\n        ISNULL(dim.Industry, '') <> ISNULL(stg.IndustryId, '') OR\n        ISNULL(dim.ClientType, '') <> ISNULL(stg.ClientTypeId, '') OR\n        ISNULL(dim.SalesPerson, '') <> ISNULL(stg.SalesPerson, '')\n    );\n",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "DimPolicy",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "DimClient",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "\n-- STEP 1: Expire outdated records\nUPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimMember dim\nJOIN stg.Member stg \n    ON dim.MemberId = stg.MemberId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Email, '') <> ISNULL(stg.Email, '') OR\n      ISNULL(dim.DOB, '1900-01-01') <> ISNULL(stg.DOB, '1900-01-01') OR\n      ISNULL(dim.ParentMemberId, -1) <> ISNULL(stg.ParentMemberId, -1) OR\n      ISNULL(dim.DependantType, '') <> ISNULL(stg.DependantType, '') OR\n      ISNULL(dim.Gender, '') <> ISNULL(stg.Gender, '') OR\n      ISNULL(dim.MaritalStatus, '') <> ISNULL(stg.MaritalStatus, '') OR\n      ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1) OR\n      ISNULL(dim.NationalityId, -1) <> ISNULL(stg.NationalityId, -1) OR\n      ISNULL(dim.BasicSalary, -1) <> ISNULL(stg.BasicSalary, -1) OR\n      ISNULL(dim.CostCenter, '') <> ISNULL(stg.CostCenter, '') OR\n      ISNULL(dim.JobGrade, '') <> ISNULL(stg.JobGrade, '') OR\n      ISNULL(dim.JobPosition, '') <> ISNULL(stg.JobPosition, '') OR\n      ISNULL(dim.EmploymentDate, '1900-01-01') <> ISNULL(stg.EmploymentDate, '1900-01-01')\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimMember (\n    MemberId,\n    FullName,\n    Email,\n    DOB,\n    ParentMemberId,\n    DependantType,\n    Gender,\n    MaritalStatus,\n    AddressId,\n    NationalityId,\n    BasicSalary,\n    CostCenter,\n    JobGrade,\n    JobPosition,\n    EmploymentDate,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.MemberId,\n\tTRIM(\n        CONCAT_WS(' ', \n            NULLIF(TRIM(FirstName), ''),\n            NULLIF(TRIM(MiddleName), ''),\n            NULLIF(TRIM(LastName), '')\n        )\n    ) AS FullName,\n    stg.Email,\n    stg.DOB,\n    stg.ParentMemberId,\n    stg.DependantType,\n    stg.Gender,\n    stg.MaritalStatus,\n    stg.AddressId,\n    stg.NationalityId,\n    stg.BasicSalary,\n    stg.CostCenter,\n    stg.JobGrade,\n    stg.JobPosition,\n    stg.EmploymentDate,\n    stg.CreatedDate,       -- Use source.CreatedDate as ValidFrom\n    NULL,                  -- ValidTo = NULL for active records\n    1,                     -- IsActive\n    GETUTCDATE()       -- LoadDate\nFROM stg.Member stg\nLEFT JOIN dbo.DimMember dim \n    ON dim.MemberId = stg.MemberId AND dim.IsActive = 1\nWHERE dim.MemberId IS NULL  -- New records\n   OR (\n        ISNULL(dim.Email, '') <> ISNULL(stg.Email, '') OR\n        ISNULL(dim.DOB, '1900-01-01') <> ISNULL(stg.DOB, '1900-01-01') OR\n        ISNULL(dim.ParentMemberId, -1) <> ISNULL(stg.ParentMemberId, -1) OR\n        ISNULL(dim.DependantType, '') <> ISNULL(stg.DependantType, '') OR\n        ISNULL(dim.Gender, '') <> ISNULL(stg.Gender, '') OR\n        ISNULL(dim.MaritalStatus, '') <> ISNULL(stg.MaritalStatus, '') OR\n        ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1) OR\n        ISNULL(dim.NationalityId, -1) <> ISNULL(stg.NationalityId, -1) OR\n        ISNULL(dim.BasicSalary, -1) <> ISNULL(stg.BasicSalary, -1) OR\n        ISNULL(dim.CostCenter, '') <> ISNULL(stg.CostCenter, '') OR\n        ISNULL(dim.JobGrade, '') <> ISNULL(stg.JobGrade, '') OR\n        ISNULL(dim.JobPosition, '') <> ISNULL(stg.JobPosition, '') OR\n        ISNULL(dim.EmploymentDate, '1900-01-01') <> ISNULL(stg.EmploymentDate, '1900-01-01')\n    );",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2025-04-15T09:35:55Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

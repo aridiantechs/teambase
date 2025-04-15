@@ -1,0 +1,72 @@
+{
+	"name": "PL_Load_FLOW",
+	"properties": {
+		"activities": [
+			{
+				"name": "Ex_PL_Load_DW_Dim",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "EX_PL_STG_Load_CDC",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "PL_Load_DW_Dim",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "Ex_PL_Load_FACT",
+				"type": "ExecutePipeline",
+				"dependsOn": [
+					{
+						"activity": "Ex_PL_Load_DW_Dim",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "PL_Load_FACT",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "EX_PL_STG_Load_CDC",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"policy": {
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "PL_STG_Load_CDC",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2025-04-14T11:45:42Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
