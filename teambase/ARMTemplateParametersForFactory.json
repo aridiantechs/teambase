@@ -1,0 +1,39 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "teambase"
+		},
+		"LS_ADLS_DEV_Bronze_accountKey": {
+			"value": ""
+		},
+		"LS_AzureSQLDB_password": {
+			"value": ""
+		},
+		"LS_OnPremSQL_password": {
+			"value": ""
+		},
+		"LS_ADLS_DEV_Bronze_properties_typeProperties_url": {
+			"value": "https://teambase.dfs.core.windows.net/"
+		},
+		"LS_AzureSQLDB_properties_typeProperties_server": {
+			"value": "teambase.database.windows.net"
+		},
+		"LS_AzureSQLDB_properties_typeProperties_database": {
+			"value": "teambase"
+		},
+		"LS_AzureSQLDB_properties_typeProperties_userName": {
+			"value": "sqladmin"
+		},
+		"LS_OnPremSQL_properties_typeProperties_server": {
+			"value": "DESKTOP-BO7RKUV"
+		},
+		"LS_OnPremSQL_properties_typeProperties_database": {
+			"value": "DemoWillis_2025-03-10_12-20"
+		},
+		"LS_OnPremSQL_properties_typeProperties_userName": {
+			"value": "tayyab"
+		}
+	}
+}

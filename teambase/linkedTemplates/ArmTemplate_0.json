@@ -1,0 +1,1567 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "teambase"
+		},
+		"LS_ADLS_DEV_Bronze_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'LS_ADLS_DEV_Bronze'"
+		},
+		"LS_AzureSQLDB_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'LS_AzureSQLDB'"
+		},
+		"LS_OnPremSQL_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'LS_OnPremSQL'"
+		},
+		"LS_ADLS_DEV_Bronze_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://teambase.dfs.core.windows.net/"
+		},
+		"LS_AzureSQLDB_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "teambase.database.windows.net"
+		},
+		"LS_AzureSQLDB_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "teambase"
+		},
+		"LS_AzureSQLDB_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "sqladmin"
+		},
+		"LS_OnPremSQL_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "DESKTOP-BO7RKUV"
+		},
+		"LS_OnPremSQL_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "DemoWillis_2025-03-10_12-20"
+		},
+		"LS_OnPremSQL_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "tayyab"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_ADLS_DEV_Bronze')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('LS_ADLS_DEV_Bronze_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('LS_ADLS_DEV_Bronze_accountKey')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_AzureSQLDB')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlDatabase",
+				"typeProperties": {
+					"server": "[parameters('LS_AzureSQLDB_properties_typeProperties_server')]",
+					"database": "[parameters('LS_AzureSQLDB_properties_typeProperties_database')]",
+					"encrypt": "mandatory",
+					"trustServerCertificate": false,
+					"authenticationType": "SQL",
+					"userName": "[parameters('LS_AzureSQLDB_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('LS_AzureSQLDB_password')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/IR-OnPrem')]",
+			"type": "Microsoft.DataFactory/factories/integrationRuntimes",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "SelfHosted",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PL_Load_DW_Dim')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Dim_Policy",
+						"type": "Script",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "\nUPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = SYSUTCDATETIME()\nFROM dbo.DimPolicy dim\nJOIN stg.Policy stg \n    ON dim.PolicyId = stg.PolicyId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Number, '') <> ISNULL(stg.Number, '') OR\n      ISNULL(dim.PolicySegment, '') <> ISNULL(stg.PolicySegmentId, '') OR\n      ISNULL(dim.PolicyType, '') <> ISNULL(stg.PolicyTypeId, '') OR\n      ISNULL(dim.RefundType, '') <> ISNULL(stg.RefundProtocol, '') OR\n      ISNULL(dim.PremiumFrequency, '') <> ISNULL(stg.PremiumFrequencyID, '')\n  );\n\n  \nINSERT INTO dbo.DimPolicy (\n    PolicyId,\n    Name,\n    Number,\n    PolicySegment,\n    PolicyType,\n    RefundType,\n    PremiumFrequency,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.PolicyId,\n    stg.Name,\n    stg.Number,\n    stg.PolicySegmentId,\n    stg.PolicyTypeId,\n    stg.RefundProtocol,\n    stg.PremiumFrequencyId,\n    stg.CreatedOn,       -- 👈 Use source-created date as ValidFrom\n    NULL,                -- ValidTo open\n    1,                   -- IsActive\n    SYSUTCDATETIME()     -- LoadDate (when loaded into warehouse)\nFROM stg.Policy stg\nLEFT JOIN dbo.DimPolicy dim \n    ON dim.PolicyId = stg.PolicyId AND dim.IsActive = 1\nWHERE dim.PolicyId IS NULL\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Number, '') <> ISNULL(stg.Number, '') OR\n        ISNULL(dim.PolicySegment, '') <> ISNULL(stg.PolicySegmentId, '') OR\n        ISNULL(dim.PolicyType, '') <> ISNULL(stg.PolicyTypeId, '') OR\n        ISNULL(dim.RefundType, '') <> ISNULL(stg.RefundProtocol, '') OR\n        ISNULL(dim.PremiumFrequency, '') <> ISNULL(stg.PremiumFrequencyId, '')\n    );\n",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "DimCarrier",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Dim_Policy",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimCarrier dim\nJOIN stg.Carrier stg \n    ON dim.CarrierId = stg.CarrierId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n      ISNULL(dim.CustomerCareEmail, '') <> ISNULL(stg.CustomerCareEmail, '') OR\n      ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1)\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimCarrier (\n    CarrierId,\n    Name,\n    Code,\n    CustomerCareEmail,\n    AddressId,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.CarrierId,\n    stg.Name,\n    stg.Code,\n    stg.CustomerCareEmail,\n    stg.AddressId,\n    CreatedOn,  -- ValidFrom = ETL load time (or use source.CreatedOn if available)\n    NULL,               -- ValidTo open for active records\n    1,                  -- IsActive\n    GETUTCDATE()    -- LoadDate\nFROM stg.Carrier stg\nLEFT JOIN dbo.DimCarrier dim \n    ON dim.CarrierId = stg.CarrierId AND dim.IsActive = 1\nWHERE dim.CarrierId IS NULL  -- New records\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n        ISNULL(dim.CustomerCareEmail, '') <> ISNULL(stg.CustomerCareEmail, '') OR\n        ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1)\n    );  ",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "DimClient",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "DimCarrier",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimClient dim\nJOIN stg.Client stg \n    ON dim.ClientId = stg.ClientId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n      ISNULL(dim.ClientSegment, '') <> ISNULL(stg.ClientSegmentId, '') OR  -- Compare NAMES, not IDs!\n      ISNULL(dim.Industry, '') <> ISNULL(stg.IndustryId, '') OR\n      ISNULL(dim.ClientType, '') <> ISNULL(stg.ClientTypeId, '') OR\n      ISNULL(dim.SalesPerson, '') <> ISNULL(stg.SalesPerson, '')\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimClient (\n    ClientId,\n    Name,\n    Code,\n    ClientSegment,\n    Industry,\n    ClientType,\n    SalesPerson,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.ClientId,\n    stg.Name,\n    stg.Code,\n    stg.ClientSegmentId,\n    stg.IndustryId,\n    stg.ClientTypeId,\n    stg.SalesPerson,\n    stg.CreatedOn,  -- Use source.CreatedOn if available\n    NULL,               -- ValidTo = NULL for active records\n    1,                  -- IsActive\n    GETUTCDATE()    -- LoadDate\nFROM stg.Client stg\nLEFT JOIN dbo.DimClient dim \n    ON dim.ClientId = stg.ClientId AND dim.IsActive = 1\nWHERE dim.ClientId IS NULL  -- New records\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n        ISNULL(dim.ClientSegment, '') <> ISNULL(stg.ClientSegmentId, '') OR\n        ISNULL(dim.Industry, '') <> ISNULL(stg.IndustryId, '') OR\n        ISNULL(dim.ClientType, '') <> ISNULL(stg.ClientTypeId, '') OR\n        ISNULL(dim.SalesPerson, '') <> ISNULL(stg.SalesPerson, '')\n    );\n",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "DimPolicy",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "DimClient",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "\n-- STEP 1: Expire outdated records\nUPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimMember dim\nJOIN stg.Member stg \n    ON dim.MemberId = stg.MemberId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Email, '') <> ISNULL(stg.Email, '') OR\n      ISNULL(dim.DOB, '1900-01-01') <> ISNULL(stg.DOB, '1900-01-01') OR\n      ISNULL(dim.ParentMemberId, -1) <> ISNULL(stg.ParentMemberId, -1) OR\n      ISNULL(dim.DependantType, '') <> ISNULL(stg.DependantType, '') OR\n      ISNULL(dim.Gender, '') <> ISNULL(stg.Gender, '') OR\n      ISNULL(dim.MaritalStatus, '') <> ISNULL(stg.MaritalStatus, '') OR\n      ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1) OR\n      ISNULL(dim.NationalityId, -1) <> ISNULL(stg.NationalityId, -1) OR\n      ISNULL(dim.BasicSalary, -1) <> ISNULL(stg.BasicSalary, -1) OR\n      ISNULL(dim.CostCenter, '') <> ISNULL(stg.CostCenter, '') OR\n      ISNULL(dim.JobGrade, '') <> ISNULL(stg.JobGrade, '') OR\n      ISNULL(dim.JobPosition, '') <> ISNULL(stg.JobPosition, '') OR\n      ISNULL(dim.EmploymentDate, '1900-01-01') <> ISNULL(stg.EmploymentDate, '1900-01-01')\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimMember (\n    MemberId,\n    FullName,\n    Email,\n    DOB,\n    ParentMemberId,\n    DependantType,\n    Gender,\n    MaritalStatus,\n    AddressId,\n    NationalityId,\n    BasicSalary,\n    CostCenter,\n    JobGrade,\n    JobPosition,\n    EmploymentDate,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.MemberId,\n\tTRIM(\n        CONCAT_WS(' ', \n            NULLIF(TRIM(FirstName), ''),\n            NULLIF(TRIM(MiddleName), ''),\n            NULLIF(TRIM(LastName), '')\n        )\n    ) AS FullName,\n    stg.Email,\n    stg.DOB,\n    stg.ParentMemberId,\n    stg.DependantType,\n    stg.Gender,\n    stg.MaritalStatus,\n    stg.AddressId,\n    stg.NationalityId,\n    stg.BasicSalary,\n    stg.CostCenter,\n    stg.JobGrade,\n    stg.JobPosition,\n    stg.EmploymentDate,\n    stg.CreatedDate,       -- Use source.CreatedDate as ValidFrom\n    NULL,                  -- ValidTo = NULL for active records\n    1,                     -- IsActive\n    GETUTCDATE()       -- LoadDate\nFROM stg.Member stg\nLEFT JOIN dbo.DimMember dim \n    ON dim.MemberId = stg.MemberId AND dim.IsActive = 1\nWHERE dim.MemberId IS NULL  -- New records\n   OR (\n        ISNULL(dim.Email, '') <> ISNULL(stg.Email, '') OR\n        ISNULL(dim.DOB, '1900-01-01') <> ISNULL(stg.DOB, '1900-01-01') OR\n        ISNULL(dim.ParentMemberId, -1) <> ISNULL(stg.ParentMemberId, -1) OR\n        ISNULL(dim.DependantType, '') <> ISNULL(stg.DependantType, '') OR\n        ISNULL(dim.Gender, '') <> ISNULL(stg.Gender, '') OR\n        ISNULL(dim.MaritalStatus, '') <> ISNULL(stg.MaritalStatus, '') OR\n        ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1) OR\n        ISNULL(dim.NationalityId, -1) <> ISNULL(stg.NationalityId, -1) OR\n        ISNULL(dim.BasicSalary, -1) <> ISNULL(stg.BasicSalary, -1) OR\n        ISNULL(dim.CostCenter, '') <> ISNULL(stg.CostCenter, '') OR\n        ISNULL(dim.JobGrade, '') <> ISNULL(stg.JobGrade, '') OR\n        ISNULL(dim.JobPosition, '') <> ISNULL(stg.JobPosition, '') OR\n        ISNULL(dim.EmploymentDate, '1900-01-01') <> ISNULL(stg.EmploymentDate, '1900-01-01')\n    );",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-04-15T09:35:55Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PL_Load_FACT')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "FactWorkFLow",
+						"type": "Script",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "INSERT INTO dbo.FactWorkflow (\n    WorkflowId,\n    MemberSK,\n    PolicySK,\n    CreatedOn,\n    LoadDate\n)\nSELECT\n    stag.WorkflowId,\n    member.DimMemberSK,\n    policy.DimPolicySK,\n    stag.CreatedOn,\n    GETUTCDATE()\nFROM (\n    SELECT DISTINCT \n        w.WorkflowId,\n        mwl.MemberId,\n        mwl.PolicyId,\n        w.CreatedOn\n    FROM stg.Workflow w\n    JOIN stg.MemberWorkflowLog mwl ON w.WorkflowId = mwl.WorkflowId\n    JOIN stg.Policy p ON p.PolicyId = mwl.PolicyId\n) stag\n\n-- Match Member at point-in-time\nJOIN dbo.DimMember member \n    ON stag.MemberId = member.MemberId \n    AND stag.CreatedOn BETWEEN member.ValidFrom AND ISNULL(member.ValidTo, '9999-12-31')\n    AND member.IsActive = 1\n\n-- Match Policy at point-in-time\nJOIN dbo.DimPolicy policy \n    ON stag.PolicyId = policy.PolicyId \n    AND stag.CreatedOn BETWEEN policy.ValidFrom AND ISNULL(policy.ValidTo, '9999-12-31')\n    AND policy.IsActive = 1\n\n-- Prevent duplicates\nWHERE NOT EXISTS (\n    SELECT 1 \n    FROM dbo.FactWorkflow f \n    WHERE f.WorkflowId = stag.WorkflowId\n);\n",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "FactMedicalClaim",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "FactWorkFLow",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "INSERT INTO dbo.FactMedicalClaim (\n    MedicalClaimId,\n    MemberSK,\n    InsurerClaimNumber,\n    InternalClaimNumber,\n    AmountClaimed,\n    PaymentTypeId,\n    AmountSettled,\n    DateReceived,\n    MedicalClaimStatusId,\n    AmountReAssessed,\n    SettlementDate,\n    LoadDate\n)\nSELECT \n    stg.MedicalClaimId,\n    dm.DimMemberSK,\n    stg.InsurerClaimNumber,\n    stg.InternalClaimNumber,\n    stg.AmountClaimed,\n    stg.PaymentTypeId,\n    stg.AmountSettled,\n    stg.DateReceived,\n    stg.MedicalClaimStatusId,\n    stg.AmountReAssessed,\n    stg.SettlementDate,\n    GETUTCDATE()\nFROM stg.MedicalClaim stg\nJOIN dbo.DimMember dm\n    ON stg.MemberId = dm.MemberId \n    AND stg.DateReceived BETWEEN dm.ValidFrom AND ISNULL(dm.ValidTo, '9999-12-31')\n    AND dm.IsActive = 1\nWHERE NOT EXISTS (\n    SELECT 1 \n    FROM dbo.FactMedicalClaim fc \n    WHERE fc.MedicalClaimId = stg.MedicalClaimId\n);\n",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "FactPolicy",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "FactMedicalClaim",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "INSERT INTO dbo.FactPolicy (\n    PolicySK,\n    ClientSK,\n    CarrierSK,\n    Country,\n    CategoryName,\n    Product,\n    BaseCurrencyName,\n    Premium,\n    Commission,\n    Fee,\n    ClientFee,\n    MembersCount,\n    ActiveMembers,\n    ActiveEmployees,\n    TotalBasmahFee,\n    PolicyStartDate,\n    PolicyEndDate,\n    CommissionPercent,\n    LoadDate\n)\nSELECT \n    p.DimPolicySK AS PolicyId,\n    client.DimClientSK,\n    carrier.DimCarrierSK,\n    sp.Country,\n    sp.CategoryName,\n    sp.Product,\n    sp.BaseCurrencyName,\n    sp.Premium,\n    sp.Commission,\n    sp.Fee,\n    sp.ClientFee,\n    sp.MembersCount,\n    sp.ActiveMembers,\n    sp.ActiveEmployes,\n    sp.TotalBasmahFee,\n    sp.PolicyStartDate,\n    sp.PolicyEndDate,\n    sp.CommissionPercent,\n    GETUTCDATE() AS LoadDate\n\nFROM stg.spPolicy sp\nJOIN stg.Policy pol ON sp.PolicyId = pol.PolicyId\nJOIN dbo.DimPolicy p ON sp.PolicyId = p.PolicyId\nJOIN dbo.DimClient client ON pol.ClientId = client.ClientId AND client.IsActive = 1\nJOIN dbo.DimCarrier carrier ON pol.CarrierId = carrier.CarrierId AND carrier.IsActive = 1\n\n-- Only insert if no matching row with same data exists\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM dbo.FactPolicy fp\n    WHERE fp.PolicySK = p.DimPolicySK\n      AND ISNULL(fp.ClientSK, -1) = ISNULL(client.DimClientSK, -1)\n      AND ISNULL(fp.CarrierSK, -1) = ISNULL(carrier.DimCarrierSK, -1)\n      AND ISNULL(fp.Country, '') = ISNULL(sp.Country, '')\n      AND ISNULL(fp.CategoryName, '') = ISNULL(sp.CategoryName, '')\n      AND ISNULL(fp.Product, '') = ISNULL(sp.Product, '')\n      AND ISNULL(fp.BaseCurrencyName, '') = ISNULL(sp.BaseCurrencyName, '')\n      AND ISNULL(fp.Premium, -1) = ISNULL(sp.Premium, -1)\n      AND ISNULL(fp.Commission, -1) = ISNULL(sp.Commission, -1)\n      AND ISNULL(fp.Fee, -1) = ISNULL(sp.Fee, -1)\n      AND ISNULL(fp.ClientFee, -1) = ISNULL(sp.ClientFee, -1)\n      AND ISNULL(fp.MembersCount, -1) = ISNULL(sp.MembersCount, -1)\n      AND ISNULL(fp.ActiveMembers, -1) = ISNULL(sp.ActiveMembers, -1)\n      AND ISNULL(fp.ActiveEmployees, -1) = ISNULL(sp.ActiveEmployes, -1)\n      AND ISNULL(fp.TotalBasmahFee, -1) = ISNULL(sp.TotalBasmahFee, -1)\n      AND ISNULL(fp.PolicyStartDate, '1900-01-01') = ISNULL(sp.PolicyStartDate, '1900-01-01')\n      AND ISNULL(fp.PolicyEndDate, '1900-01-01') = ISNULL(sp.PolicyEndDate, '1900-01-01')\n      AND ISNULL(fp.CommissionPercent, -1) = ISNULL(sp.CommissionPercent, -1)\n);",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-04-14T13:21:24Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_AzureSQLTable')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"tableName": {
+						"type": "string"
+					},
+					"SchemaName": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [],
+				"typeProperties": {
+					"schema": {
+						"value": "@dataset().SchemaName",
+						"type": "Expression"
+					},
+					"table": {
+						"value": "@dataset().tableName",
+						"type": "Expression"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_MetadataTable')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "TableName",
+						"type": "nvarchar"
+					},
+					{
+						"name": "IncrementalColumn",
+						"type": "nvarchar"
+					},
+					{
+						"name": "ColumnType",
+						"type": "nvarchar"
+					},
+					{
+						"name": "LastLoadedValue",
+						"type": "nvarchar"
+					},
+					{
+						"name": "TargetTable",
+						"type": "nvarchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "",
+					"table": ""
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Parquet1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "LS_ADLS_DEV_Bronze",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"folderPath": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"folderPath": {
+							"value": "@dataset().folderPath",
+							"type": "Expression"
+						}
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_ADLS_DEV_Bronze')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_OnPremSQL')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "SqlServer",
+				"typeProperties": {
+					"server": "[parameters('LS_OnPremSQL_properties_typeProperties_server')]",
+					"database": "[parameters('LS_OnPremSQL_properties_typeProperties_database')]",
+					"encrypt": "optional",
+					"trustServerCertificate": false,
+					"authenticationType": "SQL",
+					"userName": "[parameters('LS_OnPremSQL_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('LS_OnPremSQL_password')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "IR-OnPrem",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/integrationRuntimes/IR-OnPrem')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_OnPremSQLTable')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "LS_OnPremSQL",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"tableName": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "SqlServerTable",
+				"schema": [],
+				"typeProperties": {
+					"schema": "",
+					"table": {
+						"value": "@dataset().tableName",
+						"type": "Expression"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_OnPremSQL')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_SP_OnPremSQL')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "LS_OnPremSQL",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "SqlServerTable",
+				"schema": [],
+				"typeProperties": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_OnPremSQL')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PL_Load_Bronze')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"state": "Inactive",
+						"onInactiveMarkAs": "Succeeded",
+						"dependsOn": [
+							{
+								"activity": "GetMetadata",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('GetMetadata').output.value\n",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "copy_to_stg",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "SqlServerSource",
+											"sqlReaderQuery": {
+												"value": "@concat(\n    'SELECT * FROM [', item().TableName,']',\n    if(\n        equals(item().ParquetLastLoadedValue, null),\n        '',\n        concat(\n            ' WHERE ',\n            item().IncrementalColumnName,\n            if(\n                equals(item().columnType, 'id'),\n                concat(' > ', item().ParquetLastLoadedValue),\n                concat(' > CAST(''', item().ParquetLastLoadedValue, ''' AS DATETIME)')\n            )\n        )\n    )\n)",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "ParquetSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "ParquetWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_OnPremSQLTable",
+											"type": "DatasetReference",
+											"parameters": {
+												"tableName": {
+													"value": "@item()\n",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Parquet1",
+											"type": "DatasetReference",
+											"parameters": {
+												"folderPath": {
+													"value": "@concat('silver/', item().TableName)",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "copy_to_stg",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "SqlServerSource",
+											"sqlReaderQuery": {
+												"value": "@concat(\n    'SELECT *,0 AS LoadFlag FROM [', item().TableName,']',\n    if(\n        equals(item().lastloadedvalue, null),\n        '',\n        concat(\n            ' WHERE ',\n            item().IncrementalColumnName,\n            if(\n                equals(item().columnType, 'id'),\n                concat(' > ', item().lastloadedvalue),\n                concat(' > CAST(''', item().lastloadedvalue, ''' AS DATETIME)')\n            )\n        )\n    )\n)",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "AzureSqlSink",
+											"writeBehavior": "insert",
+											"sqlWriterUseTableLock": false,
+											"tableOption": "autoCreate",
+											"disableMetricsCollection": false
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_OnPremSQLTable",
+											"type": "DatasetReference",
+											"parameters": {
+												"tableName": {
+													"value": "@item().TableName",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_AzureSQLTable",
+											"type": "DatasetReference",
+											"parameters": {
+												"tableName": {
+													"value": "@item().TableName",
+													"type": "Expression"
+												},
+												"SchemaName": "dbo"
+											}
+										}
+									]
+								},
+								{
+									"name": "Script1",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "Copy data1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "LS_AzureSQLDB",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "@concat(\n  'UPDATE dbo.IncrementalLoadMetadata SET LastLoadedValue = (SELECT MAX(', \n  item().IncrementalColumn, \n  ') FROM ', \n  item().TableName,\n  ') WHERE TableName = ''', \n  item().TableName, \n  ''''\n)\n",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								},
+								{
+									"name": "Script2",
+									"type": "Script",
+									"state": "Inactive",
+									"onInactiveMarkAs": "Succeeded",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "LS_AzureSQLDB",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "DECLARE @sql NVARCHAR(MAX);\nSET @sql = 'ALTER TABLE ' + '@{item().TableName} ' + 'ADD LoadFlag INT DEFAULT 0;';\nEXEC sp_executesql @sql;\n\n",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "GetMetadata",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": "SELECT * FROM IncrementalLoadMetadata",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DS_MetadataTable",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-04-11T10:52:01Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_MetadataTable')]",
+				"[concat(variables('factoryId'), '/datasets/DS_OnPremSQLTable')]",
+				"[concat(variables('factoryId'), '/datasets/Parquet1')]",
+				"[concat(variables('factoryId'), '/datasets/DS_AzureSQLTable')]",
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PL_STG_Load_CDC')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": "SELECT * FROM stg.etlControl",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DS_MetadataTable",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "SqlServerSource",
+											"sqlReaderQuery": {
+												"value": "@concat(\n    'SELECT * FROM [',\n    item().TableName,\n    '] WHERE CreatedOn > ''',\n    item().LastLoadTime,\n    ''' OR UpdatedOn > ''',\n    item().LastLoadTime,\n    ''''\n)\n",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "AzureSqlSink",
+											"writeBehavior": "insert",
+											"sqlWriterUseTableLock": false,
+											"disableMetricsCollection": false
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_OnPremSQLTable",
+											"type": "DatasetReference",
+											"parameters": {
+												"tableName": {
+													"value": "@item().TableName",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_AzureSQLTable",
+											"type": "DatasetReference",
+											"parameters": {
+												"tableName": {
+													"value": "@item().TableName",
+													"type": "Expression"
+												},
+												"SchemaName": "stg"
+											}
+										}
+									]
+								},
+								{
+									"name": "Script1",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "Copy data1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "LS_AzureSQLDB",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "UPDATE stg.etlControl\nSET LastLoadTime = GETUTCDATE()\nWHERE TableName = '@{item().TableName}'\n",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Load Sp",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlServerSource",
+								"sqlReaderStoredProcedureName": "[[dbo].[RevenueReport_Get]",
+								"storedProcedureParameters": {
+									"DefaultCurrencyId": {
+										"type": "Int32",
+										"value": "1"
+									},
+									"LanguageId": {
+										"type": "Int32",
+										"value": "1"
+									},
+									"UserId": {
+										"type": "Int32",
+										"value": "1"
+									}
+								},
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "TRUNCATE TABLE stg.",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "ClientName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "ClientName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "EGlobalCode",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "EGlobalCode",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "Country",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "Country",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "CategoryName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "CategoryName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "PolicyId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "PolicyName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyNumber",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "PolicyNumber",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "PolicyTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "Carrier",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "Carrier",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PlanId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "PlanId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "Product",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "Product",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "Premium",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 4,
+											"precision": 19
+										},
+										"sink": {
+											"name": "Premium",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 4,
+											"precision": 19
+										}
+									},
+									{
+										"source": {
+											"name": "Commission",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 7,
+											"precision": 38
+										},
+										"sink": {
+											"name": "Commission",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 7,
+											"precision": 38
+										}
+									},
+									{
+										"source": {
+											"name": "Fee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 14,
+											"precision": 28
+										},
+										"sink": {
+											"name": "Fee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 14,
+											"precision": 28
+										}
+									},
+									{
+										"source": {
+											"name": "ClientFee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 6,
+											"precision": 38
+										},
+										"sink": {
+											"name": "ClientFee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 6,
+											"precision": 38
+										}
+									},
+									{
+										"source": {
+											"name": "MembersCount",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "MembersCount",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "ActiveMembers",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "ActiveMembers",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "ActiveEmployes",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "ActiveEmployes",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "DeletedEmployes",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "DeletedEmployes",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "TotalBasmahFee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 0,
+											"precision": 18
+										},
+										"sink": {
+											"name": "TotalBasmahFee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 0,
+											"precision": 18
+										}
+									},
+									{
+										"source": {
+											"name": "ClientSince",
+											"type": "DateTime",
+											"physicalType": "date"
+										},
+										"sink": {
+											"name": "ClientSince",
+											"type": "DateTime",
+											"physicalType": "date"
+										}
+									},
+									{
+										"source": {
+											"name": "CarrierBasmahFee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 2,
+											"precision": 20
+										},
+										"sink": {
+											"name": "CarrierBasmahFee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 2,
+											"precision": 20
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyStartDate",
+											"type": "DateTime",
+											"physicalType": "date"
+										},
+										"sink": {
+											"name": "PolicyStartDate",
+											"type": "DateTime",
+											"physicalType": "date"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyEndDate",
+											"type": "DateTime",
+											"physicalType": "date"
+										},
+										"sink": {
+											"name": "PolicyEndDate",
+											"type": "DateTime",
+											"physicalType": "date"
+										}
+									},
+									{
+										"source": {
+											"name": "CommissionPercent",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 2,
+											"precision": 6
+										},
+										"sink": {
+											"name": "CommissionPercent",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 2,
+											"precision": 6
+										}
+									},
+									{
+										"source": {
+											"name": "BaseCurrency",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "BaseCurrency",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "BaseCurrencyName",
+											"type": "String",
+											"physicalType": "varchar"
+										},
+										"sink": {
+											"name": "BaseCurrencyName",
+											"type": "String",
+											"physicalType": "varchar"
+										}
+									},
+									{
+										"source": {
+											"name": "MainAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "MainAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "SecondaryAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "SecondaryAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "TertiaryAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "TertiaryAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PolcyStateTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "PolcyStateTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_SP_OnPremSQL",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_AzureSQLTable",
+								"type": "DatasetReference",
+								"parameters": {
+									"tableName": "spPolicy",
+									"SchemaName": "stg"
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-04-15T09:35:00Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_MetadataTable')]",
+				"[concat(variables('factoryId'), '/datasets/DS_SP_OnPremSQL')]",
+				"[concat(variables('factoryId'), '/datasets/DS_AzureSQLTable')]",
+				"[concat(variables('factoryId'), '/datasets/DS_OnPremSQLTable')]",
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PL_Load_FLOW')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Ex_PL_Load_DW_Dim",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "EX_PL_STG_Load_CDC",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PL_Load_DW_Dim",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Ex_PL_Load_FACT",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "Ex_PL_Load_DW_Dim",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PL_Load_FACT",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "EX_PL_STG_Load_CDC",
+						"type": "ExecutePipeline",
+						"dependsOn": [],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PL_STG_Load_CDC",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-04-14T11:45:42Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/pipelines/PL_Load_DW_Dim')]",
+				"[concat(variables('factoryId'), '/pipelines/PL_Load_FACT')]",
+				"[concat(variables('factoryId'), '/pipelines/PL_STG_Load_CDC')]"
+			]
+		}
+	]
+}
