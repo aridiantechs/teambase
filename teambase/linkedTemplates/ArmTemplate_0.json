@@ -243,6 +243,42 @@
 							],
 							"scriptBlockExecutionTimeout": "02:00:00"
 						}
+					},
+					{
+						"name": "PolicyRenewal",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "DimPolicy",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimPolicyRenewal dim\nJOIN stg.PolicyRenewal stg\n    ON dim.DestinationPolicyId = stg.DestinationPolicyId\nWHERE dim.IsActive = 1\n  AND (\n       ISNULL(dim.SourcePolicyId, -1) <> ISNULL(stg.SourcePolicyId, -1) OR\n       ISNULL(dim.RenewalStatus, -1) <> ISNULL(stg.RenewalStatus, -1)\n  );\n\n\nINSERT INTO dbo.DimPolicyRenewal (\n    DestinationPolicyId,\n    SourcePolicyId,\n    RenewalStatus,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.DestinationPolicyId,\n    stg.SourcePolicyId,\n    stg.RenewalStatus,\n    stg.CreatedOn AS ValidFrom,\n    NULL AS ValidTo,\n    1 AS IsActive,\n    GETUTCDATE() AS LoadDate\nFROM stg.PolicyRenewal stg\nLEFT JOIN dbo.DimPolicyRenewal dim\n    ON stg.DestinationPolicyId = dim.DestinationPolicyId AND dim.IsActive = 1\nWHERE dim.DestinationPolicyId IS NULL\n   OR (\n       ISNULL(dim.SourcePolicyId, -1) <> ISNULL(stg.SourcePolicyId, -1) OR\n       ISNULL(dim.RenewalStatus, -1) <> ISNULL(stg.RenewalStatus, -1)\n   );",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
 					}
 				],
 				"policy": {
