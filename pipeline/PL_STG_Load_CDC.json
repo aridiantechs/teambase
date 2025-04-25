@@ -653,10 +653,9 @@
 					},
 					"sink": {
 						"type": "AzureSqlSink",
-						"preCopyScript": "IF OBJECT_ID('stg.TransactionSLA', 'U') IS NOT NULL\n    TRUNCATE TABLE stg.TransactionSLA;\n",
+						"preCopyScript": "IF OBJECT_ID('dbo.TransactionSLA', 'U') IS NOT NULL\n    TRUNCATE TABLE dbo.TransactionSLA;\n",
 						"writeBehavior": "insert",
 						"sqlWriterUseTableLock": false,
-						"tableOption": "autoCreate",
 						"disableMetricsCollection": false
 					},
 					"enableStaging": false,
@@ -681,7 +680,7 @@
 						"type": "DatasetReference",
 						"parameters": {
 							"tableName": "TransactionSLA",
-							"SchemaName": "stg"
+							"SchemaName": "dbo"
 						}
 					}
 				]
