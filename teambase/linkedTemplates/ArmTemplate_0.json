@@ -318,7 +318,7 @@
 								{
 									"type": "Query",
 									"text": {
-										"value": "INSERT INTO dbo.FactWorkflow (\n    WorkflowId,\n    MemberSK,\n    PolicySK,\n    CreatedOn,\n    LoadDate,\n    WorkflowTypeId\n)\nSELECT\n    stag.WorkflowId,\n    member.DimMemberSK,\n    policy.DimPolicySK,\n    stag.CreatedOn,\n    GETUTCDATE(),\n    stag.WorkflowTypeId\nFROM (\n    SELECT DISTINCT \n        w.WorkflowId,\n        mwl.MemberId,\n        mwl.PolicyId,\n        w.CreatedOn,\n        w.WorkflowTypeId\n    FROM stg.Workflow w\n    JOIN stg.MemberWorkflowLog mwl ON w.WorkflowId = mwl.WorkflowId\n    JOIN stg.Policy p ON p.PolicyId = mwl.PolicyId\n) stag\n\n-- Match Member at point-in-time\nJOIN dbo.DimMember member \n    ON stag.MemberId = member.MemberId \n    AND stag.CreatedOn BETWEEN member.ValidFrom AND ISNULL(member.ValidTo, '9999-12-31')\n    AND member.IsActive = 1\n\n-- Match Policy at point-in-time\nJOIN dbo.DimPolicy policy \n    ON stag.PolicyId = policy.PolicyId \n    AND stag.CreatedOn BETWEEN policy.ValidFrom AND ISNULL(policy.ValidTo, '9999-12-31')\n    AND policy.IsActive = 1\n\n-- Prevent duplicates\nWHERE NOT EXISTS (\n    SELECT 1 \n    FROM dbo.FactWorkflow f \n    WHERE f.WorkflowId = stag.WorkflowId\n);\n",
+										"value": "INSERT INTO dbo.FactWorkflow (\n    WorkflowId,\n    MemberSK,\n    PolicySK,\n    CreatedOn,\n    LoadDate,\n    WorkflowTypeId\n)\nSELECT\n    stag.WorkflowId,\n    member.DimMemberSK,\n    policy.DimPolicySK,\n    stag.CreatedOn,\n    GETUTCDATE(),\n    stag.WorkflowTypeId\nFROM (\n    SELECT DISTINCT \n        w.WorkflowId,\n        mwl.MemberId,\n        mwl.PolicyId,\n        w.CreatedOn,\n        w.WorkflowTypeId\n    FROM stg.Workflow w\n    LEFT JOIN stg.MemberWorkflowLog mwl ON w.WorkflowId = mwl.WorkflowId\n    LEFT JOIN stg.Policy p ON p.PolicyId = mwl.PolicyId\n) stag\n\n-- Match Member at point-in-time\nJOIN dbo.DimMember member \n    ON stag.MemberId = member.MemberId \n    AND stag.CreatedOn BETWEEN member.ValidFrom AND ISNULL(member.ValidTo, '9999-12-31')\n    AND member.IsActive = 1\n\n-- Match Policy at point-in-time\nJOIN dbo.DimPolicy policy \n    ON stag.PolicyId = policy.PolicyId \n    AND stag.CreatedOn BETWEEN policy.ValidFrom AND ISNULL(policy.ValidTo, '9999-12-31')\n    AND policy.IsActive = 1\n\n-- Prevent duplicates\nWHERE NOT EXISTS (\n    SELECT 1 \n    FROM dbo.FactWorkflow f \n    WHERE f.WorkflowId = stag.WorkflowId\n);\n",
 										"type": "Expression"
 									}
 								}
@@ -1556,6 +1556,66 @@
 								"type": "DatasetReference",
 								"parameters": {
 									"tableName": "TransactionSLA",
+									"SchemaName": "dbo"
+								}
+							}
+						]
+					},
+					{
+						"name": "Claim SLA",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Transaction SLA",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlServerSource",
+								"sqlReaderQuery": "DECLARE \r\n    @DefaultFirstFollowUp INT = 4,\r\n    @DefaultSecondFollowUp INT = 6,\r\n    @DefaultBrokerReviewFollowUp INT = 5, \r\n    @TodayDate DATETIME = GETDATE();\r\n\r\nSELECT \r\n    mc.MedicalClaimId,\r\n    mc.DateReceived,\r\n    \r\n    COALESCE(settlpsla.FirstFollowUp, settlcsla.FirstFollowUp, @DefaultFirstFollowUp) AS SettlementSlaFirstFollowUp,\r\n    COALESCE(settlpsla.SecondFollowUp, settlcsla.SecondFollowUp, @DefaultSecondFollowUp) AS SettlementSlaSecondFollowUp,\r\n    dbo.GetTat(\r\n        ISNULL(mc.ResubmissionDate, mc.DateSubmitted),\r\n        mc.SettlementDate,\r\n        c.ClientId \r\n    ) AS SettlementTat,\r\n\r\n    COALESCE(evalpsla.FirstFollowUp, evalcsla.FirstFollowUp, @DefaultFirstFollowUp) AS EvaluationSlaFirstFollowUp,\r\n    COALESCE(evalpsla.SecondFollowUp, evalcsla.SecondFollowUp, @DefaultSecondFollowUp) AS EvaluationSlaSecondFollowUp,\r\n    dbo.GetTat(\r\n        ISNULL(mc.ResubmissionDate, mc.DateSubmitted),\r\n        mc.EvaluationDate,\r\n        c.ClientId\r\n    ) AS EvaluationTat,\r\n\r\n    COALESCE(brpsla.FirstFollowUp, brcsla.FirstFollowUp, @DefaultBrokerReviewFollowUp) AS BrokerReviewSlaFirstFollowUp,\r\n    COALESCE(brpsla.SecondFollowUp, brcsla.SecondFollowUp, @DefaultBrokerReviewFollowUp) AS BrokerReviewSlaSecondFollowUp,\r\n    dbo.GetTat(\r\n        ISNULL(mc.ResubmissionDate, mc.DateSubmitted),\r\n        mc.BrokerReviewDate,\r\n        c.ClientId\r\n    ) AS BrokerReviewTat,\r\n    ISNULL(mc.IsOriginalsAwaited, 0) AS OriginalsAwaited,\r\n    mc.DateClosed,\r\n    CASE\r\n        WHEN dbo.GetTat(ISNULL(mc.ResubmissionDate, mc.DateSubmitted), mc.SettlementDate, c.ClientId) > COALESCE(settlpsla.FirstFollowUp, settlcsla.FirstFollowUp, @DefaultFirstFollowUp)\r\n        THEN CASE\r\n            WHEN dbo.GetTat(ISNULL(mc.ResubmissionDate, mc.DateSubmitted), mc.SettlementDate, c.ClientId) > COALESCE(settlpsla.SecondFollowUp, settlcsla.SecondFollowUp, @DefaultSecondFollowUp)\r\n                THEN 'Red'\r\n            ELSE 'Yellow'\r\n        END\r\n        ELSE 'Green'\r\n    END AS SLAColor,\r\n\r\n    CASE\r\n        WHEN dbo.GetTat(ISNULL(mc.ResubmissionDate, mc.DateSubmitted), mc.SettlementDate, c.ClientId) > COALESCE(settlpsla.SecondFollowUp, settlcsla.SecondFollowUp, @DefaultSecondFollowUp)\r\n            THEN 0\r\n        ELSE 1\r\n    END AS IsTransactionSLA\r\nFROM dbo.MemberPolicyCategory mpc\r\nINNER JOIN dbo.PolicyCategory pc ON mpc.PolicyCategoryId = pc.PolicyCategoryId\r\nINNER JOIN dbo.Category cat ON pc.CategoryId = cat.CategoryId\r\nINNER JOIN dbo.Policy p ON pc.PolicyId = p.PolicyId\r\nINNER JOIN dbo.MedicalClaim mc ON mpc.MemberPolicyCategoryId = mc.MemberPolicyCategoryId\r\nINNER JOIN dbo.WorkflowMedicalClaim wm ON mc.MedicalClaimId = wm.MedicalClaimId\r\nINNER JOIN dbo.Carrier cr ON p.CarrierId = cr.CarrierId\r\nINNER JOIN dbo.Client c ON p.ClientId = c.ClientId\r\nLEFT JOIN dbo.CarrierSLA settlcsla ON cr.CarrierId = settlcsla.CarrierId AND settlcsla.SLAProcessTypeId = 1  -- 1 = MedicalClaimSettlementSla\r\nLEFT JOIN dbo.PolicySLA settlpsla ON p.PolicyId = settlpsla.PolicyId AND settlpsla.SLAProcessTypeId = 1\r\nLEFT JOIN dbo.CarrierSLA evalcsla ON cr.CarrierId = evalcsla.CarrierId AND evalcsla.SLAProcessTypeId = 2  -- 2 = MedicalClaimEvaluationSla\r\nLEFT JOIN dbo.PolicySLA evalpsla ON p.PolicyId = evalpsla.PolicyId AND evalpsla.SLAProcessTypeId = 2\r\nLEFT JOIN dbo.CarrierSLA brcsla ON cr.CarrierId = brcsla.CarrierId AND brcsla.SLAProcessTypeId = 3  -- 3 = MedicalClaimBrokerReviewSla\r\nLEFT JOIN dbo.PolicySLA brpsla ON p.PolicyId = brpsla.PolicyId AND brpsla.SLAProcessTypeId = 3\r\nLEFT JOIN Workflow w ON wm.WorkflowId = w.WorkflowId\r\nWHERE mc.DateClosed IS NULL\r\nAND mc.IsDeleted = 0; ",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_SP_OnPremSQL",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_AzureSQLTable",
+								"type": "DatasetReference",
+								"parameters": {
+									"tableName": "ClaimSLA",
 									"SchemaName": "dbo"
 								}
 							}
