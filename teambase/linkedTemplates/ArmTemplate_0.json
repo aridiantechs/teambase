@@ -1065,7 +1065,7 @@
 							},
 							"sink": {
 								"type": "AzureSqlSink",
-								"preCopyScript": "TRUNCATE TABLE stg.spPolicy",
+								"preCopyScript": "IF OBJECT_ID('stg.spPolicy', 'U') IS NOT NULL\n    TRUNCATE TABLE stg.TransactionSLA;\n",
 								"writeBehavior": "insert",
 								"sqlWriterUseTableLock": false,
 								"disableMetricsCollection": false
@@ -1496,6 +1496,67 @@
 								"parameters": {
 									"tableName": "spPolicy",
 									"SchemaName": "stg"
+								}
+							}
+						]
+					},
+					{
+						"name": "Transaction SLA",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Load Sp",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlServerSource",
+								"sqlReaderQuery": "DECLARE \r\n    @responsibleSysRole   INT         = NULL,        -- pass in the user’s role or NULL\r\n    @todaysDate           DATETIME    = GETDATE(),   -- or pass in your “today’s Date”\r\n    @DefaultFirstFollowUp INT         = 4,          \r\n    @DefaultSecondFollowUp INT        = 6,          \r\n    @HRRoleValue          INT         = 2,           \r\n    @BrokerRoleValue      INT         = 3;           \r\n\r\nSELECT\r\n    wf.WorkflowId,\r\n    wf.SubmittedOn,\r\n    wf.CompletedOn,\r\n    COALESCE(psla.FirstFollowUp,\r\n             csla.FirstFollowUp,\r\n             @DefaultFirstFollowUp)   AS SLAFirstFollowUp,\r\n    COALESCE(psla.SecondFollowUp,\r\n             csla.SecondFollowUp,\r\n             @DefaultSecondFollowUp)  AS SLASecondFollowUp,\r\n    dbo.GetLastResubmissionTat(\r\n        wf.CompletedOn,\r\n        wf.UpdatedOn,\r\n        client.OfficeLocationId,\r\n        wf.WorkflowTypeId,\r\n        wf.WorkflowStatusId,\r\n        wf.LastResubmissionTAT,\r\n        wf.LastResubmissionDate,\r\n        wf.TAT,\r\n        @todaysDate\r\n    )                      AS Tat,\r\n    wf.WorkflowStatusId,\r\n    wf.WorkflowTypeId,\r\n    wf.PendingActionRoleId,\r\n CASE \r\n  WHEN dbo.GetLastResubmissionTat(\r\n     wf.CompletedOn, wf.UpdatedOn, client.OfficeLocationId,\r\n     wf.WorkflowTypeId, wf.WorkflowStatusId,\r\n     wf.LastResubmissionTAT, wf.LastResubmissionDate,\r\n     wf.TAT, @todaysDate\r\n    ) > COALESCE(psla.FirstFollowUp, csla.FirstFollowUp, @DefaultFirstFollowUp)\r\n  THEN \r\n   CASE WHEN\r\n    dbo.GetLastResubmissionTat(\r\n     wf.CompletedOn, wf.UpdatedOn, client.OfficeLocationId,\r\n     wf.WorkflowTypeId, wf.WorkflowStatusId,\r\n     wf.LastResubmissionTAT, wf.LastResubmissionDate,\r\n     wf.TAT, @todaysDate\r\n    ) > COALESCE(psla.SecondFollowUp, csla.SecondFollowUp, @DefaultSecondFollowUp) \r\n    THEN 'Red'\r\n    ELSE 'Yellow'\r\n    END\r\n  ELSE 'Green'\r\n END AS SLAColor,\r\n CASE \r\n  WHEN dbo.GetLastResubmissionTat(\r\n     wf.CompletedOn, wf.UpdatedOn, client.OfficeLocationId,\r\n     wf.WorkflowTypeId, wf.WorkflowStatusId,\r\n     wf.LastResubmissionTAT, wf.LastResubmissionDate,\r\n     wf.TAT, @todaysDate\r\n    ) > COALESCE(psla.SecondFollowUp, csla.SecondFollowUp, @DefaultSecondFollowUp)\r\n  THEN 0  \r\n  ELSE 1\r\n END AS IsTransactionSLA\r\nFROM dbo.Policy AS policy\r\nINNER JOIN dbo.PolicyCategory      AS policyCategory\r\n    ON policy.PolicyId = policyCategory.PolicyId\r\n   AND policyCategory.IsDeleted = 0\r\nINNER JOIN dbo.MemberPolicyCategory AS memberPolicyCategory\r\n    ON policyCategory.PolicyCategoryId = memberPolicyCategory.PolicyCategoryId\r\nINNER JOIN dbo.Category            AS category\r\n    ON policyCategory.CategoryId = category.CategoryId\r\n   AND category.IsDeleted = 0\r\nINNER JOIN dbo.Member               AS member\r\n    ON memberPolicyCategory.MemberId = member.MemberId\r\n   AND member.IsDeleted = 0\r\nINNER JOIN dbo.WorkflowMember    AS workflowMember\r\n    ON memberPolicyCategory.MemberPolicyCategoryId = workflowMember.MemberPolicyCategoryId\r\nINNER JOIN dbo.Workflow             AS wf\r\n    ON workflowMember.WorkflowId = wf.WorkflowId\r\n   AND wf.IsCompleted = 0\r\nLEFT JOIN dbo.PolicySLA             AS psla\r\n    ON psla.PolicyId = policy.PolicyId\r\n   AND psla.SLAProcessTypeId = wf.WorkflowTypeId\r\nLEFT JOIN dbo.CarrierSLA            AS csla\r\n    ON csla.CarrierId = policy.CarrierId\r\n   AND csla.SLAProcessTypeId = wf.WorkflowTypeId\r\nINNER JOIN dbo.Client               AS client\r\n    ON policy.ClientId = client.ClientId\r\nWHERE\r\n    policy.IsDeleted = 0\r\n    AND (\r\n         dbo.IsBluePendingTask(wf.WorkflowTypeId, wf.WorkflowStatusId) = 1\r\n      OR @responsibleSysRole IS NULL\r\n      OR (\r\n           @responsibleSysRole IS NOT NULL\r\n       AND wf.PendingActionRoleId IS NOT NULL\r\n       AND (\r\n             (\r\n               @responsibleSysRole = @HRRoleValue\r\n           AND (wf.PendingActionRoleId = @HRRoleValue\r\n             OR wf.PendingActionRoleId = @BrokerRoleValue)\r\n             )\r\n           OR wf.PendingActionRoleId = @responsibleSysRole\r\n          )\r\n      )\r\n    )\r\n\tORDER By WorkflowId;\r\n\r\n ",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "IF OBJECT_ID('dbo.TransactionSLA', 'U') IS NOT NULL\n    TRUNCATE TABLE dbo.TransactionSLA;\n",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_SP_OnPremSQL",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_AzureSQLTable",
+								"type": "DatasetReference",
+								"parameters": {
+									"tableName": "TransactionSLA",
+									"SchemaName": "dbo"
 								}
 							}
 						]
