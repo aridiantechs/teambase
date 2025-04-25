@@ -191,7 +191,7 @@
 					},
 					"sink": {
 						"type": "AzureSqlSink",
-						"preCopyScript": "TRUNCATE TABLE stg.spPolicy",
+						"preCopyScript": "IF OBJECT_ID('stg.spPolicy', 'U') IS NOT NULL\n    TRUNCATE TABLE stg.TransactionSLA;\n",
 						"writeBehavior": "insert",
 						"sqlWriterUseTableLock": false,
 						"disableMetricsCollection": false
