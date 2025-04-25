@@ -713,6 +713,7 @@
 					},
 					"sink": {
 						"type": "AzureSqlSink",
+						"preCopyScript": "IF OBJECT_ID('dbo.ClaimSLA', 'U') IS NOT NULL\n    TRUNCATE TABLE dbo.ClaimSLA;\n",
 						"writeBehavior": "insert",
 						"sqlWriterUseTableLock": false,
 						"disableMetricsCollection": false
