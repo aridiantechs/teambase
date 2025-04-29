@@ -5,6 +5,8 @@
 			{
 				"name": "Lookup1",
 				"type": "Lookup",
+				"state": "Inactive",
+				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
@@ -31,6 +33,8 @@
 			{
 				"name": "ForEach1",
 				"type": "ForEach",
+				"state": "Inactive",
+				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [
 					{
 						"activity": "Lookup1",
@@ -72,6 +76,7 @@
 									"type": "AzureSqlSink",
 									"writeBehavior": "insert",
 									"sqlWriterUseTableLock": false,
+									"tableOption": "autoCreate",
 									"disableMetricsCollection": false
 								},
 								"enableStaging": false,
@@ -191,9 +196,10 @@
 					},
 					"sink": {
 						"type": "AzureSqlSink",
-						"preCopyScript": "IF OBJECT_ID('stg.spPolicy', 'U') IS NOT NULL\n    TRUNCATE TABLE stg.TransactionSLA;\n",
+						"preCopyScript": "IF OBJECT_ID('stage.spPolicy', 'U') IS NOT NULL\n    DROP TABLE stage.spPolicy;\n",
 						"writeBehavior": "insert",
 						"sqlWriterUseTableLock": false,
+						"tableOption": "autoCreate",
 						"disableMetricsCollection": false
 					},
 					"enableStaging": false,
@@ -214,6 +220,234 @@
 							},
 							{
 								"source": {
+									"name": "ClientTypeId",
+									"type": "Int32",
+									"physicalType": "int"
+								},
+								"sink": {
+									"name": "ClientTypeId",
+									"type": "Int32",
+									"physicalType": "int"
+								}
+							},
+							{
+								"source": {
+									"name": "MainClientId",
+									"type": "Int32",
+									"physicalType": "int"
+								},
+								"sink": {
+									"name": "MainClientId",
+									"type": "Int32",
+									"physicalType": "int"
+								}
+							},
+							{
+								"source": {
+									"name": "ClientSegment",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "ClientSegment",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "Industry",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "Industry",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "City",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "City",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "PhysicalAddress",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "PhysicalAddress",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "PhoneNumber",
+									"type": "String",
+									"physicalType": "varchar"
+								},
+								"sink": {
+									"name": "PhoneNumber",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "MainAccountManager",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "MainAccountManager",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "CensusManagementSupport",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "CensusManagementSupport",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "BusinessTeam",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "BusinessTeam",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "OfficeLocation",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "OfficeLocation",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "IsMain",
+									"type": "Boolean",
+									"physicalType": "bit"
+								},
+								"sink": {
+									"name": "IsMain",
+									"type": "Boolean",
+									"physicalType": "bit"
+								}
+							},
+							{
+								"source": {
+									"name": "PolicyExpired",
+									"type": "Boolean",
+									"physicalType": "bit"
+								},
+								"sink": {
+									"name": "PolicyExpired",
+									"type": "Boolean",
+									"physicalType": "bit"
+								}
+							},
+							{
+								"source": {
+									"name": "PolcyStateTypeId",
+									"type": "Int32",
+									"physicalType": "int"
+								},
+								"sink": {
+									"name": "PolcyStateTypeId",
+									"type": "Int32",
+									"physicalType": "int"
+								}
+							},
+							{
+								"source": {
+									"name": "PolicyStartDate",
+									"type": "DateTime",
+									"physicalType": "date"
+								},
+								"sink": {
+									"name": "PolicyStartDate",
+									"type": "DateTime",
+									"physicalType": "datetime2"
+								}
+							},
+							{
+								"source": {
+									"name": "PolicyEndDate",
+									"type": "DateTime",
+									"physicalType": "date"
+								},
+								"sink": {
+									"name": "PolicyEndDate",
+									"type": "DateTime",
+									"physicalType": "datetime2"
+								}
+							},
+							{
+								"source": {
+									"name": "ActiveEmployes",
+									"type": "Int32",
+									"physicalType": "int"
+								},
+								"sink": {
+									"name": "ActiveEmployes",
+									"type": "Int32",
+									"physicalType": "int"
+								}
+							},
+							{
+								"source": {
+									"name": "ActiveDependants",
+									"type": "Int32",
+									"physicalType": "int"
+								},
+								"sink": {
+									"name": "ActiveDependants",
+									"type": "Int32",
+									"physicalType": "int"
+								}
+							},
+							{
+								"source": {
+									"name": "ActiveChildren",
+									"type": "Int32",
+									"physicalType": "int"
+								},
+								"sink": {
+									"name": "ActiveChildren",
+									"type": "Int32",
+									"physicalType": "int"
+								}
+							},
+							{
+								"source": {
 									"name": "EGlobalCode",
 									"type": "String",
 									"physicalType": "nvarchar"
@@ -244,6 +478,42 @@
 								},
 								"sink": {
 									"name": "CategoryName",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "CategoryDescription",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "CategoryDescription",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "CategoryId",
+									"type": "Int32",
+									"physicalType": "int"
+								},
+								"sink": {
+									"name": "CategoryId",
+									"type": "Int32",
+									"physicalType": "int"
+								}
+							},
+							{
+								"source": {
+									"name": "CategoryPlanName",
+									"type": "String",
+									"physicalType": "varchar"
+								},
+								"sink": {
+									"name": "CategoryPlanName",
 									"type": "String",
 									"physicalType": "nvarchar"
 								}
@@ -343,9 +613,7 @@
 								"sink": {
 									"name": "Premium",
 									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 4,
-									"precision": 19
+									"physicalType": "decimal"
 								}
 							},
 							{
@@ -359,9 +627,7 @@
 								"sink": {
 									"name": "Commission",
 									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 7,
-									"precision": 38
+									"physicalType": "decimal"
 								}
 							},
 							{
@@ -375,9 +641,7 @@
 								"sink": {
 									"name": "Fee",
 									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 14,
-									"precision": 28
+									"physicalType": "decimal"
 								}
 							},
 							{
@@ -391,21 +655,7 @@
 								"sink": {
 									"name": "ClientFee",
 									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 6,
-									"precision": 38
-								}
-							},
-							{
-								"source": {
-									"name": "MembersCount",
-									"type": "Int32",
-									"physicalType": "int"
-								},
-								"sink": {
-									"name": "MembersCount",
-									"type": "Int32",
-									"physicalType": "int"
+									"physicalType": "decimal"
 								}
 							},
 							{
@@ -422,46 +672,6 @@
 							},
 							{
 								"source": {
-									"name": "ActiveEmployes",
-									"type": "Int32",
-									"physicalType": "int"
-								},
-								"sink": {
-									"name": "ActiveEmployes",
-									"type": "Int32",
-									"physicalType": "int"
-								}
-							},
-							{
-								"source": {
-									"name": "DeletedEmployes",
-									"type": "Int32",
-									"physicalType": "int"
-								},
-								"sink": {
-									"name": "DeletedEmployes",
-									"type": "Int32",
-									"physicalType": "int"
-								}
-							},
-							{
-								"source": {
-									"name": "TotalBasmahFee",
-									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 0,
-									"precision": 18
-								},
-								"sink": {
-									"name": "TotalBasmahFee",
-									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 0,
-									"precision": 18
-								}
-							},
-							{
-								"source": {
 									"name": "ClientSince",
 									"type": "DateTime",
 									"physicalType": "date"
@@ -469,47 +679,7 @@
 								"sink": {
 									"name": "ClientSince",
 									"type": "DateTime",
-									"physicalType": "date"
-								}
-							},
-							{
-								"source": {
-									"name": "CarrierBasmahFee",
-									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 2,
-									"precision": 20
-								},
-								"sink": {
-									"name": "CarrierBasmahFee",
-									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 2,
-									"precision": 20
-								}
-							},
-							{
-								"source": {
-									"name": "PolicyStartDate",
-									"type": "DateTime",
-									"physicalType": "date"
-								},
-								"sink": {
-									"name": "PolicyStartDate",
-									"type": "DateTime",
-									"physicalType": "date"
-								}
-							},
-							{
-								"source": {
-									"name": "PolicyEndDate",
-									"type": "DateTime",
-									"physicalType": "date"
-								},
-								"sink": {
-									"name": "PolicyEndDate",
-									"type": "DateTime",
-									"physicalType": "date"
+									"physicalType": "datetime2"
 								}
 							},
 							{
@@ -523,9 +693,7 @@
 								"sink": {
 									"name": "CommissionPercent",
 									"type": "Decimal",
-									"physicalType": "decimal",
-									"scale": 2,
-									"precision": 6
+									"physicalType": "decimal"
 								}
 							},
 							{
@@ -538,30 +706,6 @@
 									"name": "BaseCurrency",
 									"type": "Int32",
 									"physicalType": "int"
-								}
-							},
-							{
-								"source": {
-									"name": "BaseCurrencyName",
-									"type": "String",
-									"physicalType": "varchar"
-								},
-								"sink": {
-									"name": "BaseCurrencyName",
-									"type": "String",
-									"physicalType": "varchar"
-								}
-							},
-							{
-								"source": {
-									"name": "MainAccountManager",
-									"type": "String",
-									"physicalType": "nvarchar"
-								},
-								"sink": {
-									"name": "MainAccountManager",
-									"type": "String",
-									"physicalType": "nvarchar"
 								}
 							},
 							{
@@ -590,14 +734,38 @@
 							},
 							{
 								"source": {
-									"name": "PolcyStateTypeId",
-									"type": "Int32",
-									"physicalType": "int"
+									"name": "ClientCreatedBy",
+									"type": "String",
+									"physicalType": "nvarchar"
 								},
 								"sink": {
-									"name": "PolcyStateTypeId",
-									"type": "Int32",
-									"physicalType": "int"
+									"name": "ClientCreatedBy",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "PolicyCreatedBy",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "PolicyCreatedBy",
+									"type": "String",
+									"physicalType": "nvarchar"
+								}
+							},
+							{
+								"source": {
+									"name": "CategoryCreatedBy",
+									"type": "String",
+									"physicalType": "nvarchar"
+								},
+								"sink": {
+									"name": "CategoryCreatedBy",
+									"type": "String",
+									"physicalType": "nvarchar"
 								}
 							}
 						],
@@ -620,7 +788,7 @@
 						"type": "DatasetReference",
 						"parameters": {
 							"tableName": "spPolicy",
-							"SchemaName": "stg"
+							"SchemaName": "stage"
 						}
 					}
 				]
@@ -628,6 +796,8 @@
 			{
 				"name": "Transaction SLA",
 				"type": "Copy",
+				"state": "Inactive",
+				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [
 					{
 						"activity": "Load Sp",
@@ -656,6 +826,7 @@
 						"preCopyScript": "IF OBJECT_ID('dbo.TransactionSLA', 'U') IS NOT NULL\n    TRUNCATE TABLE dbo.TransactionSLA;\n",
 						"writeBehavior": "insert",
 						"sqlWriterUseTableLock": false,
+						"tableOption": "autoCreate",
 						"disableMetricsCollection": false
 					},
 					"enableStaging": false,
@@ -688,6 +859,8 @@
 			{
 				"name": "Claim SLA",
 				"type": "Copy",
+				"state": "Inactive",
+				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [
 					{
 						"activity": "Transaction SLA",
@@ -716,6 +889,7 @@
 						"preCopyScript": "IF OBJECT_ID('dbo.ClaimSLA', 'U') IS NOT NULL\n    TRUNCATE TABLE dbo.ClaimSLA;\n",
 						"writeBehavior": "insert",
 						"sqlWriterUseTableLock": false,
+						"tableOption": "autoCreate",
 						"disableMetricsCollection": false
 					},
 					"enableStaging": false,
