@@ -2,7 +2,7 @@
 	"name": "DS_OnPremSQLTable",
 	"properties": {
 		"linkedServiceName": {
-			"referenceName": "LS_OnPremSQL",
+			"referenceName": "LS_OnPremSQL_UAT",
 			"type": "LinkedServiceReference"
 		},
 		"parameters": {
@@ -14,7 +14,6 @@
 		"type": "SqlServerTable",
 		"schema": [],
 		"typeProperties": {
-			"schema": "",
 			"table": {
 				"value": "@dataset().tableName",
 				"type": "Expression"
