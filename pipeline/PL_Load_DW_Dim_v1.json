@@ -176,7 +176,7 @@
 				}
 			},
 			{
-				"name": "Script1",
+				"name": "DimIndustry",
 				"type": "Script",
 				"dependsOn": [
 					{
