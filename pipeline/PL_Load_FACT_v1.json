@@ -5,8 +5,6 @@
 			{
 				"name": "FactWorkFLow",
 				"type": "Script",
-				"state": "Inactive",
-				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
@@ -36,8 +34,6 @@
 			{
 				"name": "FactMedicalClaim",
 				"type": "Script",
-				"state": "Inactive",
-				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [
 					{
 						"activity": "FactWorkFLow",
