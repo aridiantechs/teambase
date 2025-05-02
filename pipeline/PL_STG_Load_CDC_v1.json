@@ -1,12 +1,10 @@
 {
-	"name": "PL_STG_Load_CDC_copy1",
+	"name": "PL_STG_Load_CDC_v1",
 	"properties": {
 		"activities": [
 			{
 				"name": "Lookup1",
 				"type": "Lookup",
-				"state": "Inactive",
-				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
@@ -19,7 +17,7 @@
 				"typeProperties": {
 					"source": {
 						"type": "AzureSqlSource",
-						"sqlReaderQuery": "SELECT * FROM stg.etlControl",
+						"sqlReaderQuery": "SELECT * FROM stage.etlControl",
 						"queryTimeout": "02:00:00",
 						"partitionOption": "None"
 					},
@@ -33,8 +31,6 @@
 			{
 				"name": "ForEach1",
 				"type": "ForEach",
-				"state": "Inactive",
-				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [
 					{
 						"activity": "Lookup1",
@@ -91,13 +87,10 @@
 							},
 							"inputs": [
 								{
-									"referenceName": "DS_OnPremSQLTable",
+									"referenceName": "DS_OnPremSQLTable_UAT",
 									"type": "DatasetReference",
 									"parameters": {
-										"tableName": {
-											"value": "@item().TableName",
-											"type": "Expression"
-										}
+										"tableName": "@item().TableName"
 									}
 								}
 							],
@@ -110,7 +103,7 @@
 											"value": "@item().TableName",
 											"type": "Expression"
 										},
-										"SchemaName": "stg"
+										"SchemaName": "stage"
 									}
 								}
 							]
@@ -143,7 +136,7 @@
 									{
 										"type": "Query",
 										"text": {
-											"value": "UPDATE stg.etlControl\nSET LastLoadTime = GETUTCDATE()\nWHERE TableName = '@{item().TableName}'\n",
+											"value": "UPDATE stage.etlControl\nSET LastLoadTime = GETUTCDATE()\nWHERE TableName = '@{item().TableName}'\n",
 											"type": "Expression"
 										}
 									}
@@ -159,7 +152,7 @@
 				"type": "Copy",
 				"dependsOn": [
 					{
-						"activity": "ForEach1",
+						"activity": "Claim SLA",
 						"dependencyConditions": [
 							"Completed"
 						]
@@ -778,7 +771,7 @@
 				},
 				"inputs": [
 					{
-						"referenceName": "DS_SP_OnPremSQL",
+						"referenceName": "DS_SP_OnPrem_UAT",
 						"type": "DatasetReference"
 					}
 				],
@@ -796,11 +789,9 @@
 			{
 				"name": "Transaction SLA",
 				"type": "Copy",
-				"state": "Inactive",
-				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [
 					{
-						"activity": "Load Sp",
+						"activity": "ForEach1",
 						"dependencyConditions": [
 							"Completed"
 						]
@@ -841,7 +832,7 @@
 				},
 				"inputs": [
 					{
-						"referenceName": "DS_SP_OnPremSQL",
+						"referenceName": "DS_SP_OnPrem_UAT",
 						"type": "DatasetReference"
 					}
 				],
@@ -859,8 +850,6 @@
 			{
 				"name": "Claim SLA",
 				"type": "Copy",
-				"state": "Inactive",
-				"onInactiveMarkAs": "Succeeded",
 				"dependsOn": [
 					{
 						"activity": "Transaction SLA",
@@ -904,7 +893,7 @@
 				},
 				"inputs": [
 					{
-						"referenceName": "DS_SP_OnPremSQL",
+						"referenceName": "DS_SP_OnPrem_UAT",
 						"type": "DatasetReference"
 					}
 				],

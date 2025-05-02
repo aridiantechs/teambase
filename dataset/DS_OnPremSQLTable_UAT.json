@@ -1,0 +1,21 @@
+{
+	"name": "DS_OnPremSQLTable_UAT",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "LS_OnPremSQL_UAT",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"tableName": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "SqlServerTable",
+		"schema": [],
+		"typeProperties": {
+			"schema": "",
+			"table": "@dataset().tableName"
+		}
+	}
+}
