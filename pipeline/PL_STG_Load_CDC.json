@@ -171,7 +171,6 @@
 				"typeProperties": {
 					"source": {
 						"type": "SqlServerSource",
-						"sqlReaderStoredProcedureName": "[dbo].[RevenueReport_Get]",
 						"storedProcedureParameters": {
 							"DefaultCurrencyId": {
 								"type": "Int32",

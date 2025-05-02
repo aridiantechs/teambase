@@ -2,7 +2,7 @@
 	"name": "DS_SP_OnPremSQL",
 	"properties": {
 		"linkedServiceName": {
-			"referenceName": "LS_OnPremSQL_UAT",
+			"referenceName": "LS_OnPremSQL",
 			"type": "LinkedServiceReference"
 		},
 		"annotations": [],
