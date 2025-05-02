@@ -174,6 +174,42 @@
 					],
 					"scriptBlockExecutionTimeout": "02:00:00"
 				}
+			},
+			{
+				"name": "Script1",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "PolicyRenewal",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "LS_AzureSQLDB",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "-- Step 1: Close active records that have changed since the last load\nUPDATE dim\nSET \n    IsActive = 0,                    -- Mark the old record as inactive\n    ValidTo = SYSUTCDATETIME()       -- Set the end date for the old record\nFROM dbo.DimIndustry dim\nJOIN stg.Industry stg \n    ON dim.IndustryId = stg.IndustryId\nWHERE dim.IsActive = 1\n  AND stg.UpdatedDate > (SELECT LastLoadTime FROM dbo.Metadata WHERE TableName = 'Industry')\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      dim.IsDeleted <> stg.IsDeleted\n  );\n\n-- Step 2: Insert new records for updated or new industries\nINSERT INTO dbo.DimIndustry (\n    IndustryId,\n    Name,\n    IsDeleted,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.IndustryId,\n    stg.Name,\n    stg.IsDeleted,\n    stg.UpdatedOn,   \n    NULL,             \n    1,                   \n    SYSUTCDATETIME()     \nFROM stg.Industry stg\nLEFT JOIN dbo.DimIndustry dim \n    ON dim.IndustryId = stg.IndustryId AND dim.IsActive = 1\nWHERE stg.UpdatedDate > (SELECT LastLoadTime FROM dbo.Metadata WHERE TableName = 'Industry') \n   OR dim.IndustryId IS NULL; \n",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
 			}
 		],
 		"annotations": [],
