@@ -19,6 +19,10 @@
 			"type": "secureString",
 			"metadata": "Secure string for 'password' of 'LS_OnPremSQL'"
 		},
+		"LS_OnPremSQL_UAT_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'LS_OnPremSQL_UAT'"
+		},
 		"LS_ADLS_DEV_Bronze_properties_typeProperties_url": {
 			"type": "string",
 			"defaultValue": "https://teambase.dfs.core.windows.net/"
@@ -44,6 +48,18 @@
 			"defaultValue": "DemoWillis_2025-03-10_12-20"
 		},
 		"LS_OnPremSQL_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "tayyab"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "DESKTOP-BO7RKUV"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "benefitnet-lifecare-2025-04-28-14-00"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_userName": {
 			"type": "string",
 			"defaultValue": "tayyab"
 		}
@@ -436,7 +452,7 @@
 						}
 					},
 					{
-						"name": "DimPolicy",
+						"name": "DimMember",
 						"type": "Script",
 						"dependsOn": [
 							{
@@ -476,7 +492,7 @@
 						"type": "Script",
 						"dependsOn": [
 							{
-								"activity": "DimPolicy",
+								"activity": "DimMember",
 								"dependencyConditions": [
 									"Completed"
 								]
@@ -500,6 +516,232 @@
 									"type": "Query",
 									"text": {
 										"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimPolicyRenewal dim\nJOIN stg.PolicyRenewal stg\n    ON dim.DestinationPolicyId = stg.DestinationPolicyId\nWHERE dim.IsActive = 1\n  AND (\n       ISNULL(dim.SourcePolicyId, -1) <> ISNULL(stg.SourcePolicyId, -1) OR\n       ISNULL(dim.RenewalStatus, -1) <> ISNULL(stg.RenewalStatus, -1)\n  );\n\n\nINSERT INTO dbo.DimPolicyRenewal (\n    DestinationPolicyId,\n    SourcePolicyId,\n    RenewalStatus,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.DestinationPolicyId,\n    stg.SourcePolicyId,\n    stg.RenewalStatus,\n    stg.CreatedOn AS ValidFrom,\n    NULL AS ValidTo,\n    1 AS IsActive,\n    GETUTCDATE() AS LoadDate\nFROM stg.PolicyRenewal stg\nLEFT JOIN dbo.DimPolicyRenewal dim\n    ON stg.DestinationPolicyId = dim.DestinationPolicyId AND dim.IsActive = 1\nWHERE dim.DestinationPolicyId IS NULL\n   OR (\n       ISNULL(dim.SourcePolicyId, -1) <> ISNULL(stg.SourcePolicyId, -1) OR\n       ISNULL(dim.RenewalStatus, -1) <> ISNULL(stg.RenewalStatus, -1)\n   );",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-04-15T09:35:55Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PL_Load_DW_Dim_v1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Dim_Policy",
+						"type": "Script",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "\nUPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = SYSUTCDATETIME()\nFROM dbo.DimPolicy dim\nJOIN stage.Policy stg \n    ON dim.PolicyId = stg.PolicyId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Number, '') <> ISNULL(stg.Number, '') OR\n      ISNULL(dim.PolicySegment, '') <> ISNULL(stg.PolicySegmentId, '') OR\n      ISNULL(dim.PolicyType, '') <> ISNULL(stg.PolicyTypeId, '') OR\n      ISNULL(dim.RefundType, '') <> ISNULL(stg.RefundProtocol, '') OR\n      ISNULL(dim.PremiumFrequency, '') <> ISNULL(stg.PremiumFrequencyID, '')\n  );\n\n  \nINSERT INTO dbo.DimPolicy (\n    PolicyId,\n    Name,\n    Number,\n    PolicySegment,\n    PolicyType,\n    RefundType,\n    PremiumFrequency,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.PolicyId,\n    stg.Name,\n    stg.Number,\n    stg.PolicySegmentId,\n    stg.PolicyTypeId,\n    stg.RefundProtocol,\n    stg.PremiumFrequencyId,\n    stg.CreatedOn,      \n    NULL,\n    1,      \n    SYSUTCDATETIME() \nFROM stage.Policy stg\nLEFT JOIN dbo.DimPolicy dim \n    ON dim.PolicyId = stg.PolicyId AND dim.IsActive = 1\nWHERE dim.PolicyId IS NULL\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Number, '') <> ISNULL(stg.Number, '') OR\n        ISNULL(dim.PolicySegment, '') <> ISNULL(stg.PolicySegmentId, '') OR\n        ISNULL(dim.PolicyType, '') <> ISNULL(stg.PolicyTypeId, '') OR\n        ISNULL(dim.RefundType, '') <> ISNULL(stg.RefundProtocol, '') OR\n        ISNULL(dim.PremiumFrequency, '') <> ISNULL(stg.PremiumFrequencyId, '')\n    );\n",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "DimCarrier",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Dim_Policy",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimCarrier dim\nJOIN stage.Carrier stg \n    ON dim.CarrierId = stg.CarrierId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n      ISNULL(dim.CustomerCareEmail, '') <> ISNULL(stg.CustomerCareEmail, '') OR\n      ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1)\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimCarrier (\n    CarrierId,\n    Name,\n    Code,\n    CustomerCareEmail,\n    AddressId,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.CarrierId,\n    stg.Name,\n    stg.Code,\n    stg.CustomerCareEmail,\n    stg.AddressId,\n    CreatedOn,\n    NULL,\n    1,\n    GETUTCDATE()\nFROM stage.Carrier stg\nLEFT JOIN dbo.DimCarrier dim \n    ON dim.CarrierId = stg.CarrierId AND dim.IsActive = 1\nWHERE dim.CarrierId IS NULL\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n        ISNULL(dim.CustomerCareEmail, '') <> ISNULL(stg.CustomerCareEmail, '') OR\n        ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1)\n    );  ",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "DimClient",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "DimCarrier",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimClient dim\nJOIN stage.Client stg \n    ON dim.ClientId = stg.ClientId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n      ISNULL(dim.ClientSegment, '') <> ISNULL(stg.ClientSegmentId, '') OR  -- Compare NAMES, not IDs!\n      ISNULL(dim.Industry, '') <> ISNULL(stg.IndustryId, '') OR\n      ISNULL(dim.ClientType, '') <> ISNULL(stg.ClientTypeId, '') OR\n      ISNULL(dim.SalesPerson, '') <> ISNULL(stg.SalesPerson, '')\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimClient (\n    ClientId,\n    Name,\n    Code,\n    ClientSegment,\n    Industry,\n    ClientType,\n    SalesPerson,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.ClientId,\n    stg.Name,\n    stg.Code,\n    stg.ClientSegmentId,\n    stg.IndustryId,\n    stg.ClientTypeId,\n    stg.SalesPerson,\n    stg.CreatedOn,  -- Use source.CreatedOn if available\n    NULL,               -- ValidTo = NULL for active records\n    1,                  -- IsActive\n    GETUTCDATE()    -- LoadDate\nFROM stage.Client stg\nLEFT JOIN dbo.DimClient dim \n    ON dim.ClientId = stg.ClientId AND dim.IsActive = 1\nWHERE dim.ClientId IS NULL  -- New records\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        ISNULL(dim.Code, '') <> ISNULL(stg.Code, '') OR\n        ISNULL(dim.ClientSegment, '') <> ISNULL(stg.ClientSegmentId, '') OR\n        ISNULL(dim.Industry, '') <> ISNULL(stg.IndustryId, '') OR\n        ISNULL(dim.ClientType, '') <> ISNULL(stg.ClientTypeId, '') OR\n        ISNULL(dim.SalesPerson, '') <> ISNULL(stg.SalesPerson, '')\n    );\n",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "DimMember",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "DimClient",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "\n-- STEP 1: Expire outdated records\nUPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimMember dim\nJOIN stage.Member stg \n    ON dim.MemberId = stg.MemberId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Email, '') <> ISNULL(stg.Email, '') OR\n      ISNULL(dim.DOB, '1900-01-01') <> ISNULL(stg.DOB, '1900-01-01') OR\n      ISNULL(dim.ParentMemberId, -1) <> ISNULL(stg.ParentMemberId, -1) OR\n      ISNULL(dim.DependantType, '') <> ISNULL(stg.DependantType, '') OR\n      ISNULL(dim.Gender, '') <> ISNULL(stg.Gender, '') OR\n      ISNULL(dim.MaritalStatus, '') <> ISNULL(stg.MaritalStatus, '') OR\n      ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1) OR\n      ISNULL(dim.NationalityId, -1) <> ISNULL(stg.NationalityId, -1) OR\n      ISNULL(dim.BasicSalary, -1) <> ISNULL(stg.BasicSalary, -1) OR\n      ISNULL(dim.CostCenter, '') <> ISNULL(stg.CostCenter, '') OR\n      ISNULL(dim.JobGrade, '') <> ISNULL(stg.JobGrade, '') OR\n      ISNULL(dim.JobPosition, '') <> ISNULL(stg.JobPosition, '') OR\n      ISNULL(dim.EmploymentDate, '1900-01-01') <> ISNULL(stg.EmploymentDate, '1900-01-01')\n  );\n\n-- STEP 2: Insert new/updated records\nINSERT INTO dbo.DimMember (\n    MemberId,\n    FullName,\n    Email,\n    DOB,\n    ParentMemberId,\n    DependantType,\n    Gender,\n    MaritalStatus,\n    AddressId,\n    NationalityId,\n    BasicSalary,\n    CostCenter,\n    JobGrade,\n    JobPosition,\n    EmploymentDate,\n    IsArchived,\n    IsDeleted,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.MemberId,\n\tTRIM(\n        CONCAT_WS(' ', \n            NULLIF(TRIM(FirstName), ''),\n            NULLIF(TRIM(MiddleName), ''),\n            NULLIF(TRIM(LastName), '')\n        )\n    ) AS FullName,\n    stg.Email,\n    stg.DOB,\n    stg.ParentMemberId,\n    stg.DependantType,\n    stg.Gender,\n    stg.MaritalStatus,\n    stg.AddressId,\n    stg.NationalityId,\n    stg.BasicSalary,\n    stg.CostCenter,\n    stg.JobGrade,\n    stg.JobPosition,\n    stg.EmploymentDate,\n    stg.IsArchived,\n    stg.IsDeleted,\n    stg.CreatedOn,       -- Use source.CreatedDate as ValidFrom\n    NULL,                  -- ValidTo = NULL for active records\n    1,                     -- IsActive\n    GETUTCDATE()       -- LoadDate\nFROM stage.Member stg\nLEFT JOIN dbo.DimMember dim \n    ON dim.MemberId = stg.MemberId AND dim.IsActive = 1\nWHERE dim.MemberId IS NULL  -- New records\n   OR (\n        ISNULL(dim.Email, '') <> ISNULL(stg.Email, '') OR\n        ISNULL(dim.DOB, '1900-01-01') <> ISNULL(stg.DOB, '1900-01-01') OR\n        ISNULL(dim.ParentMemberId, -1) <> ISNULL(stg.ParentMemberId, -1) OR\n        ISNULL(dim.DependantType, '') <> ISNULL(stg.DependantType, '') OR\n        ISNULL(dim.Gender, '') <> ISNULL(stg.Gender, '') OR\n        ISNULL(dim.MaritalStatus, '') <> ISNULL(stg.MaritalStatus, '') OR\n        ISNULL(dim.AddressId, -1) <> ISNULL(stg.AddressId, -1) OR\n        ISNULL(dim.NationalityId, -1) <> ISNULL(stg.NationalityId, -1) OR\n        ISNULL(dim.BasicSalary, -1) <> ISNULL(stg.BasicSalary, -1) OR\n        ISNULL(dim.CostCenter, '') <> ISNULL(stg.CostCenter, '') OR\n        ISNULL(dim.JobGrade, '') <> ISNULL(stg.JobGrade, '') OR\n        ISNULL(dim.JobPosition, '') <> ISNULL(stg.JobPosition, '') OR\n        ISNULL(dim.EmploymentDate, '1900-01-01') <> ISNULL(stg.EmploymentDate, '1900-01-01')\n    );",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "PolicyRenewal",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "DimMember",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "UPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimPolicyRenewal dim\nJOIN stage.PolicyRenewal stg\n    ON dim.DestinationPolicyId = stg.DestinationPolicyId\nWHERE dim.IsActive = 1\n  AND (\n       ISNULL(dim.SourcePolicyId, -1) <> ISNULL(stg.SourcePolicyId, -1) OR\n       ISNULL(dim.RenewalStatus, -1) <> ISNULL(stg.RenewalStatus, -1)\n  );\n\n\nINSERT INTO dbo.DimPolicyRenewal (\n    DestinationPolicyId,\n    SourcePolicyId,\n    RenewalStatus,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.DestinationPolicyId,\n    stg.SourcePolicyId,\n    stg.RenewalStatus,\n    stg.CreatedOn AS ValidFrom,\n    NULL AS ValidTo,\n    1 AS IsActive,\n    GETUTCDATE() AS LoadDate\nFROM stage.PolicyRenewal stg\nLEFT JOIN dbo.DimPolicyRenewal dim\n    ON stg.DestinationPolicyId = dim.DestinationPolicyId AND dim.IsActive = 1\nWHERE dim.DestinationPolicyId IS NULL\n   OR (\n       ISNULL(dim.SourcePolicyId, -1) <> ISNULL(stg.SourcePolicyId, -1) OR\n       ISNULL(dim.RenewalStatus, -1) <> ISNULL(stg.RenewalStatus, -1)\n   );",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "DimIndustry",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "PolicyRenewal",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "-- Step 1: Close active records that have changed\nUPDATE dim\nSET \n    IsActive = 0,\n    ValidTo = GETUTCDATE()\nFROM dbo.DimIndustry dim\nJOIN stage.Industry stg \n    ON dim.IndustryId = stg.IndustryId\nWHERE dim.IsActive = 1\n  AND (\n      ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n      dim.IsDeleted <> stg.IsDeleted\n  );\n\n-- Step 2: Insert new/updated records\nINSERT INTO dbo.DimIndustry (\n    IndustryId,\n    Name,\n    IsDeleted,\n    ValidFrom,\n    ValidTo,\n    IsActive,\n    LoadDate\n)\nSELECT\n    stg.IndustryId,\n    stg.Name,\n    stg.IsDeleted,\n    stg.CreatedOn,       -- Assuming you have a CreatedOn in staging\n    NULL,\n    1,\n    GETUTCDATE()\nFROM stage.Industry stg\nLEFT JOIN dbo.DimIndustry dim \n    ON dim.IndustryId = stg.IndustryId AND dim.IsActive = 1\nWHERE dim.IndustryId IS NULL\n   OR (\n        ISNULL(dim.Name, '') <> ISNULL(stg.Name, '') OR\n        dim.IsDeleted <> stg.IsDeleted\n    );\n",
 										"type": "Expression"
 									}
 								}
@@ -618,6 +860,124 @@
 									"type": "Query",
 									"text": {
 										"value": "INSERT INTO dbo.FactPolicy (\n    PolicySK,\n    ClientSK,\n    CarrierSK,\n    Country,\n    CategoryName,\n    Product,\n    BaseCurrencyName,\n    Premium,\n    Commission,\n    Fee,\n    ClientFee,\n    MembersCount,\n    ActiveMembers,\n    ActiveEmployees,\n    TotalBasmahFee,\n    PolicyStartDate,\n    PolicyEndDate,\n    CommissionPercent,\n    LoadDate\n)\nSELECT \n    p.DimPolicySK AS PolicyId,\n    client.DimClientSK,\n    carrier.DimCarrierSK,\n    sp.Country,\n    sp.CategoryName,\n    sp.Product,\n    sp.BaseCurrencyName,\n    sp.Premium,\n    sp.Commission,\n    sp.Fee,\n    sp.ClientFee,\n    sp.MembersCount,\n    sp.ActiveMembers,\n    sp.ActiveEmployes,\n    sp.TotalBasmahFee,\n    sp.PolicyStartDate,\n    sp.PolicyEndDate,\n    sp.CommissionPercent,\n    GETUTCDATE() AS LoadDate\n\nFROM stg.spPolicy sp\nJOIN stg.Policy pol ON sp.PolicyId = pol.PolicyId\nJOIN dbo.DimPolicy p ON sp.PolicyId = p.PolicyId\nJOIN dbo.DimClient client ON pol.ClientId = client.ClientId AND client.IsActive = 1\nJOIN dbo.DimCarrier carrier ON pol.CarrierId = carrier.CarrierId AND carrier.IsActive = 1\n\n-- Only insert if no matching row with same data exists\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM dbo.FactPolicy fp\n    WHERE fp.PolicySK = p.DimPolicySK\n      AND ISNULL(fp.ClientSK, -1) = ISNULL(client.DimClientSK, -1)\n      AND ISNULL(fp.CarrierSK, -1) = ISNULL(carrier.DimCarrierSK, -1)\n      AND ISNULL(fp.Country, '') = ISNULL(sp.Country, '')\n      AND ISNULL(fp.CategoryName, '') = ISNULL(sp.CategoryName, '')\n      AND ISNULL(fp.Product, '') = ISNULL(sp.Product, '')\n      AND ISNULL(fp.BaseCurrencyName, '') = ISNULL(sp.BaseCurrencyName, '')\n      AND ISNULL(fp.Premium, -1) = ISNULL(sp.Premium, -1)\n      AND ISNULL(fp.Commission, -1) = ISNULL(sp.Commission, -1)\n      AND ISNULL(fp.Fee, -1) = ISNULL(sp.Fee, -1)\n      AND ISNULL(fp.ClientFee, -1) = ISNULL(sp.ClientFee, -1)\n      AND ISNULL(fp.MembersCount, -1) = ISNULL(sp.MembersCount, -1)\n      AND ISNULL(fp.ActiveMembers, -1) = ISNULL(sp.ActiveMembers, -1)\n      AND ISNULL(fp.ActiveEmployees, -1) = ISNULL(sp.ActiveEmployes, -1)\n      AND ISNULL(fp.TotalBasmahFee, -1) = ISNULL(sp.TotalBasmahFee, -1)\n      AND ISNULL(fp.PolicyStartDate, '1900-01-01') = ISNULL(sp.PolicyStartDate, '1900-01-01')\n      AND ISNULL(fp.PolicyEndDate, '1900-01-01') = ISNULL(sp.PolicyEndDate, '1900-01-01')\n      AND ISNULL(fp.CommissionPercent, -1) = ISNULL(sp.CommissionPercent, -1)\n);",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-04-14T13:21:24Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PL_Load_FACT_v1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "FactWorkFLow",
+						"type": "Script",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "INSERT INTO dbo.FactWorkflow (\n    WorkflowId,\n    MemberSK,\n    PolicySK,\n    CreatedOn,\n    LoadDate,\n    WorkflowTypeId\n)\nSELECT\n    stag.WorkflowId,\n    member.DimMemberSK,\n    policy.DimPolicySK,\n    stag.CreatedOn,\n    GETUTCDATE(),\n    stag.WorkflowTypeId\nFROM (\n    SELECT DISTINCT \n        w.WorkflowId,\n        mwl.MemberId,\n        mwl.PolicyId,\n        w.CreatedOn,\n        w.WorkflowTypeId\n    FROM stage.Workflow w\n    LEFT JOIN stage.MemberWorkflowLog mwl ON w.WorkflowId = mwl.WorkflowId\n    LEFT JOIN stage.Policy p ON p.PolicyId = mwl.PolicyId\n) stag\n\n-- Match Member at point-in-time\nJOIN dbo.DimMember member \n    ON stag.MemberId = member.MemberId \n    AND stag.CreatedOn BETWEEN member.ValidFrom AND ISNULL(member.ValidTo, '9999-12-31')\n    AND member.IsActive = 1\n\n-- Match Policy at point-in-time\nJOIN dbo.DimPolicy policy \n    ON stag.PolicyId = policy.PolicyId \n    AND stag.CreatedOn BETWEEN policy.ValidFrom AND ISNULL(policy.ValidTo, '9999-12-31')\n    AND policy.IsActive = 1\n\n-- Prevent duplicates\nWHERE NOT EXISTS (\n    SELECT 1 \n    FROM dbo.FactWorkflow f \n    WHERE f.WorkflowId = stag.WorkflowId\n);\n",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "FactMedicalClaim",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "FactWorkFLow",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "INSERT INTO dbo.FactMedicalClaim (\n    MedicalClaimId,\n    MemberSK,\n    InsurerClaimNumber,\n    InternalClaimNumber,\n    AmountClaimed,\n    PaymentTypeId,\n    AmountSettled,\n    DateReceived,\n    MedicalClaimStatusId,\n    AmountReAssessed,\n    SettlementDate,\n    LoadDate\n)\nSELECT \n    stg.MedicalClaimId,\n    dm.DimMemberSK,\n    stg.InsurerClaimNumber,\n    stg.InternalClaimNumber,\n    stg.AmountClaimed,\n    stg.PaymentTypeId,\n    stg.AmountSettled,\n    stg.DateReceived,\n    stg.MedicalClaimStatusId,\n    stg.AmountReAssessed,\n    stg.SettlementDate,\n    GETUTCDATE()\nFROM stage.MedicalClaim stg\nJOIN dbo.DimMember dm\n    ON stg.MemberId = dm.MemberId \n    AND stg.DateReceived BETWEEN dm.ValidFrom AND ISNULL(dm.ValidTo, '9999-12-31')\n    AND dm.IsActive = 1\nWHERE NOT EXISTS (\n    SELECT 1 \n    FROM dbo.FactMedicalClaim fc \n    WHERE fc.MedicalClaimId = stg.MedicalClaimId\n);\n",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "FactPolicy",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "FactMedicalClaim",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "LS_AzureSQLDB",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "INSERT INTO dbo.FactPolicy (\n    PolicySK,\n    ClientSK,\n    CarrierSK,\n    Country,\n    CategoryName,\n    Product,\n    BaseCurrencyName,\n    Premium,\n    Commission,\n    Fee,\n    ClientFee,\n    ActiveMembers,\n    ActiveEmployees,\n    PolicyStartDate,\n    PolicyEndDate,\n    CommissionPercent,\n    LoadDate\n)\nSELECT \n    p.DimPolicySK AS PolicyId,\n    client.DimClientSK,\n    carrier.DimCarrierSK,\n    sp.Country,\n    sp.CategoryName,\n    sp.Product,\n    sp.BaseCurrency,\n    sp.Premium,\n    sp.Commission,\n    sp.Fee,\n    sp.ClientFee,\n    sp.ActiveMembers,\n    sp.ActiveEmployes,\n    sp.PolicyStartDate,\n    sp.PolicyEndDate,\n    sp.CommissionPercent,\n    GETUTCDATE() AS LoadDate\n\nFROM stage.spPolicy sp\nJOIN stage.Policy pol ON sp.PolicyId = pol.PolicyId\nJOIN dbo.DimPolicy p ON sp.PolicyId = p.PolicyId\nJOIN dbo.DimClient client ON pol.ClientId = client.ClientId AND client.IsActive = 1\nJOIN dbo.DimCarrier carrier ON pol.CarrierId = carrier.CarrierId AND carrier.IsActive = 1\n\n-- Only insert if no matching row with same data exists\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM dbo.FactPolicy fp\n    WHERE fp.PolicySK = p.DimPolicySK\n      AND ISNULL(fp.ClientSK, -1) = ISNULL(client.DimClientSK, -1)\n      AND ISNULL(fp.CarrierSK, -1) = ISNULL(carrier.DimCarrierSK, -1)\n      AND ISNULL(fp.Country, '') = ISNULL(sp.Country, '')\n      AND ISNULL(fp.CategoryName, '') = ISNULL(sp.CategoryName, '')\n      AND ISNULL(fp.Product, '') = ISNULL(sp.Product, '')\n      AND ISNULL(fp.BaseCurrencyName, '') = ISNULL(sp.BaseCurrency, '')\n      AND ISNULL(fp.Premium, -1) = ISNULL(sp.Premium, -1)\n      AND ISNULL(fp.Commission, -1) = ISNULL(sp.Commission, -1)\n      AND ISNULL(fp.Fee, -1) = ISNULL(sp.Fee, -1)\n      AND ISNULL(fp.ClientFee, -1) = ISNULL(sp.ClientFee, -1)\n      AND ISNULL(fp.ActiveMembers, -1) = ISNULL(sp.ActiveMembers, -1)\n      AND ISNULL(fp.ActiveEmployees, -1) = ISNULL(sp.ActiveEmployes, -1)\n      AND ISNULL(fp.PolicyStartDate, '1900-01-01') = ISNULL(sp.PolicyStartDate, '1900-01-01')\n      AND ISNULL(fp.PolicyEndDate, '1900-01-01') = ISNULL(sp.PolicyEndDate, '1900-01-01')\n      AND ISNULL(fp.CommissionPercent, -1) = ISNULL(sp.CommissionPercent, -1)\n);",
 										"type": "Expression"
 									}
 								}
@@ -1489,6 +1849,937 @@
 			]
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/PL_STG_Load_CDC_v1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": "SELECT * FROM stage.etlControl",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DS_MetadataTable",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "SqlServerSource",
+											"sqlReaderQuery": {
+												"value": "@concat(\n  'SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY [',\n  item().KeyColumnName,\n  '] ORDER BY UpdatedOn DESC, CreatedOn DESC) AS rn FROM [',\n  item().TableName,\n  '] WHERE CreatedOn > ''',\n  item().LastLoadTime,\n  ''' OR UpdatedOn > ''',\n  item().LastLoadTime,\n  ''') AS x WHERE rn = 1'\n)\n",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "AzureSqlSink",
+											"writeBehavior": "insert",
+											"sqlWriterUseTableLock": false,
+											"tableOption": "autoCreate",
+											"disableMetricsCollection": false
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DS_OnPremSQLTable_UAT",
+											"type": "DatasetReference",
+											"parameters": {
+												"tableName": "@item().TableName"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DS_AzureSQLTable",
+											"type": "DatasetReference",
+											"parameters": {
+												"tableName": {
+													"value": "@item().TableName",
+													"type": "Expression"
+												},
+												"SchemaName": "stage"
+											}
+										}
+									]
+								},
+								{
+									"name": "Script1",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "Copy data1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "LS_AzureSQLDB",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "UPDATE stage.etlControl\nSET LastLoadTime = GETUTCDATE()\nWHERE TableName = '@{item().TableName}'\n",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Load Sp",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Claim SLA",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlServerSource",
+								"sqlReaderStoredProcedureName": "[[dbo].[RevenueReport_Get]",
+								"storedProcedureParameters": {
+									"DefaultCurrencyId": {
+										"type": "Int32",
+										"value": "1"
+									},
+									"LanguageId": {
+										"type": "Int32",
+										"value": "1"
+									},
+									"UserId": {
+										"type": "Int32",
+										"value": "1"
+									}
+								},
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "IF OBJECT_ID('stage.spPolicy', 'U') IS NOT NULL\n    DROP TABLE stage.spPolicy;\n",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"tableOption": "autoCreate",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "ClientName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "ClientName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "ClientTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "ClientTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "MainClientId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "MainClientId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "ClientSegment",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "ClientSegment",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "Industry",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "Industry",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "City",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "City",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PhysicalAddress",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "PhysicalAddress",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PhoneNumber",
+											"type": "String",
+											"physicalType": "varchar"
+										},
+										"sink": {
+											"name": "PhoneNumber",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "MainAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "MainAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "CensusManagementSupport",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "CensusManagementSupport",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "BusinessTeam",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "BusinessTeam",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "OfficeLocation",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "OfficeLocation",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "IsMain",
+											"type": "Boolean",
+											"physicalType": "bit"
+										},
+										"sink": {
+											"name": "IsMain",
+											"type": "Boolean",
+											"physicalType": "bit"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyExpired",
+											"type": "Boolean",
+											"physicalType": "bit"
+										},
+										"sink": {
+											"name": "PolicyExpired",
+											"type": "Boolean",
+											"physicalType": "bit"
+										}
+									},
+									{
+										"source": {
+											"name": "PolcyStateTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "PolcyStateTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyStartDate",
+											"type": "DateTime",
+											"physicalType": "date"
+										},
+										"sink": {
+											"name": "PolicyStartDate",
+											"type": "DateTime",
+											"physicalType": "datetime2"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyEndDate",
+											"type": "DateTime",
+											"physicalType": "date"
+										},
+										"sink": {
+											"name": "PolicyEndDate",
+											"type": "DateTime",
+											"physicalType": "datetime2"
+										}
+									},
+									{
+										"source": {
+											"name": "ActiveEmployes",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "ActiveEmployes",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "ActiveDependants",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "ActiveDependants",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "ActiveChildren",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "ActiveChildren",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "EGlobalCode",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "EGlobalCode",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "Country",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "Country",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "CategoryName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "CategoryName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "CategoryDescription",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "CategoryDescription",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "CategoryId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "CategoryId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "CategoryPlanName",
+											"type": "String",
+											"physicalType": "varchar"
+										},
+										"sink": {
+											"name": "CategoryPlanName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "PolicyId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "PolicyName",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyNumber",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "PolicyNumber",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "PolicyTypeId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "Carrier",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "Carrier",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PlanId",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "PlanId",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "Product",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "Product",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "Premium",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 4,
+											"precision": 19
+										},
+										"sink": {
+											"name": "Premium",
+											"type": "Decimal",
+											"physicalType": "decimal"
+										}
+									},
+									{
+										"source": {
+											"name": "Commission",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 7,
+											"precision": 38
+										},
+										"sink": {
+											"name": "Commission",
+											"type": "Decimal",
+											"physicalType": "decimal"
+										}
+									},
+									{
+										"source": {
+											"name": "Fee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 14,
+											"precision": 28
+										},
+										"sink": {
+											"name": "Fee",
+											"type": "Decimal",
+											"physicalType": "decimal"
+										}
+									},
+									{
+										"source": {
+											"name": "ClientFee",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 6,
+											"precision": 38
+										},
+										"sink": {
+											"name": "ClientFee",
+											"type": "Decimal",
+											"physicalType": "decimal"
+										}
+									},
+									{
+										"source": {
+											"name": "ActiveMembers",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "ActiveMembers",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "ClientSince",
+											"type": "DateTime",
+											"physicalType": "date"
+										},
+										"sink": {
+											"name": "ClientSince",
+											"type": "DateTime",
+											"physicalType": "datetime2"
+										}
+									},
+									{
+										"source": {
+											"name": "CommissionPercent",
+											"type": "Decimal",
+											"physicalType": "decimal",
+											"scale": 2,
+											"precision": 6
+										},
+										"sink": {
+											"name": "CommissionPercent",
+											"type": "Decimal",
+											"physicalType": "decimal"
+										}
+									},
+									{
+										"source": {
+											"name": "BaseCurrency",
+											"type": "Int32",
+											"physicalType": "int"
+										},
+										"sink": {
+											"name": "BaseCurrency",
+											"type": "Int32",
+											"physicalType": "int"
+										}
+									},
+									{
+										"source": {
+											"name": "SecondaryAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "SecondaryAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "TertiaryAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "TertiaryAccountManager",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "ClientCreatedBy",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "ClientCreatedBy",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "PolicyCreatedBy",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "PolicyCreatedBy",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									},
+									{
+										"source": {
+											"name": "CategoryCreatedBy",
+											"type": "String",
+											"physicalType": "nvarchar"
+										},
+										"sink": {
+											"name": "CategoryCreatedBy",
+											"type": "String",
+											"physicalType": "nvarchar"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_SP_OnPrem_UAT",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_AzureSQLTable",
+								"type": "DatasetReference",
+								"parameters": {
+									"tableName": "spPolicy",
+									"SchemaName": "stage"
+								}
+							}
+						]
+					},
+					{
+						"name": "Transaction SLA",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlServerSource",
+								"sqlReaderQuery": "DECLARE \n    @responsibleSysRole   INT         = NULL,        -- pass in the user’s role or NULL\n    @todaysDate           DATETIME    = GETUTCDATE(),   -- or pass in your “today’s Date”\n    @DefaultFirstFollowUp INT = (SELECT TOP 1 SlaFirstFollowUp FROM ApplicationSettings),\n    @DefaultSecondFollowUp INT = (SELECT TOP 1 SlaSecondFollowUp FROM ApplicationSettings),       \n    @HRRoleValue          INT         = 2,           \n    @BrokerRoleValue      INT         = 3;     \n\nSELECT\n    wf.WorkflowId,\n    wf.SubmittedOn,\n    wf.CompletedOn,\n    COALESCE(psla.FirstFollowUp,\n             csla.FirstFollowUp,\n             @DefaultFirstFollowUp)   AS SLAFirstFollowUp,\n    COALESCE(psla.SecondFollowUp,\n             csla.SecondFollowUp,\n             @DefaultSecondFollowUp)  AS SLASecondFollowUp,\n    dbo.GetLastResubmissionTat(\n        wf.CompletedOn,\n        wf.UpdatedOn,\n        client.OfficeLocationId,\n        wf.WorkflowTypeId,\n        wf.WorkflowStatusId,\n        wf.LastResubmissionTAT,\n        wf.LastResubmissionDate,\n        wf.TAT,\n        @todaysDate\n    )                      AS Tat,\n    wf.WorkflowStatusId,\n    wf.WorkflowTypeId,\n    wf.PendingActionRoleId,\n CASE \n  WHEN dbo.GetLastResubmissionTat(\n     wf.CompletedOn, wf.UpdatedOn, client.OfficeLocationId,\n     wf.WorkflowTypeId, wf.WorkflowStatusId,\n     wf.LastResubmissionTAT, wf.LastResubmissionDate,\n     wf.TAT, @todaysDate\n    ) > COALESCE(psla.FirstFollowUp, csla.FirstFollowUp, @DefaultFirstFollowUp)\n  THEN \n   CASE WHEN\n    dbo.GetLastResubmissionTat(\n     wf.CompletedOn, wf.UpdatedOn, client.OfficeLocationId,\n     wf.WorkflowTypeId, wf.WorkflowStatusId,\n     wf.LastResubmissionTAT, wf.LastResubmissionDate,\n     wf.TAT, @todaysDate\n    ) > COALESCE(psla.SecondFollowUp, csla.SecondFollowUp, @DefaultSecondFollowUp) \n    THEN 'Red'\n    ELSE 'Yellow'\n    END\n  ELSE 'Green'\n END AS SLAColor,\n CASE \n  WHEN dbo.GetLastResubmissionTat(\n     wf.CompletedOn, wf.UpdatedOn, client.OfficeLocationId,\n     wf.WorkflowTypeId, wf.WorkflowStatusId,\n     wf.LastResubmissionTAT, wf.LastResubmissionDate,\n     wf.TAT, @todaysDate\n    ) > COALESCE(psla.SecondFollowUp, csla.SecondFollowUp, @DefaultSecondFollowUp)\n  THEN 0  \n  ELSE 1\n END AS IsTransactionSLA\nFROM dbo.Policy AS policy\nINNER JOIN dbo.PolicyCategory      AS policyCategory\n    ON policy.PolicyId = policyCategory.PolicyId\n   AND policyCategory.IsDeleted = 0\nINNER JOIN dbo.MemberPolicyCategory AS memberPolicyCategory\n    ON policyCategory.PolicyCategoryId = memberPolicyCategory.PolicyCategoryId\nINNER JOIN dbo.Category            AS category\n    ON policyCategory.CategoryId = category.CategoryId\n   AND category.IsDeleted = 0\nINNER JOIN dbo.Member               AS member\n    ON memberPolicyCategory.MemberId = member.MemberId\n   AND member.IsDeleted = 0\nINNER JOIN dbo.WorkflowMember    AS workflowMember\n    ON memberPolicyCategory.MemberPolicyCategoryId = workflowMember.MemberPolicyCategoryId\nINNER JOIN dbo.Workflow             AS wf\n    ON workflowMember.WorkflowId = wf.WorkflowId\n   AND wf.IsCompleted = 0\nLEFT JOIN dbo.PolicySLA             AS psla\n    ON psla.PolicyId = policy.PolicyId\n   AND psla.SLAProcessTypeId = wf.WorkflowTypeId\nLEFT JOIN dbo.CarrierSLA            AS csla\n    ON csla.CarrierId = policy.CarrierId\n   AND csla.SLAProcessTypeId = wf.WorkflowTypeId\nINNER JOIN dbo.Client               AS client\n    ON policy.ClientId = client.ClientId\nWHERE\n    policy.IsDeleted = 0\n    AND (\n         dbo.IsBluePendingTask(wf.WorkflowTypeId, wf.WorkflowStatusId) = 1\n      OR @responsibleSysRole IS NULL\n      OR (\n           @responsibleSysRole IS NOT NULL\n       AND wf.PendingActionRoleId IS NOT NULL\n       AND (\n             (\n               @responsibleSysRole = @HRRoleValue\n           AND (wf.PendingActionRoleId = @HRRoleValue\n             OR wf.PendingActionRoleId = @BrokerRoleValue)\n             )\n           OR wf.PendingActionRoleId = @responsibleSysRole\n          )\n      )\n    )\n\tORDER By WorkflowId;\n\n ",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "IF OBJECT_ID('dbo.TransactionSLA', 'U') IS NOT NULL\n    TRUNCATE TABLE dbo.TransactionSLA;\n",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"tableOption": "autoCreate",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_SP_OnPrem_UAT",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_AzureSQLTable",
+								"type": "DatasetReference",
+								"parameters": {
+									"tableName": "TransactionSLA",
+									"SchemaName": "dbo"
+								}
+							}
+						]
+					},
+					{
+						"name": "Claim SLA",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Transaction SLA",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "SqlServerSource",
+								"sqlReaderQuery": "DECLARE \n    @DefaultFirstFollowUp INT = (SELECT TOP 1 SlaFirstFollowUp FROM ApplicationSettings),\n    @DefaultSecondFollowUp INT = (SELECT TOP 1 SlaSecondFollowUp FROM ApplicationSettings),\n    @DefaultBrokerReviewFollowUp INT = (SELECT TOP 1 SlaBrokerReviewFollowUp FROM ApplicationSettings), \n    @TodayDate DATETIME = GETUTCDATE();\n\nSELECT \n    mc.MedicalClaimId,\n    mc.DateReceived,\n    \n    COALESCE(settlpsla.FirstFollowUp, settlcsla.FirstFollowUp, @DefaultFirstFollowUp) AS SettlementSlaFirstFollowUp,\n    COALESCE(settlpsla.SecondFollowUp, settlcsla.SecondFollowUp, @DefaultSecondFollowUp) AS SettlementSlaSecondFollowUp,\n    dbo.GetTat(\n        ISNULL(mc.ResubmissionDate, mc.DateSubmitted),\n        mc.SettlementDate,\n        c.ClientId \n    ) AS SettlementTat,\n\n    COALESCE(evalpsla.FirstFollowUp, evalcsla.FirstFollowUp, @DefaultFirstFollowUp) AS EvaluationSlaFirstFollowUp,\n    COALESCE(evalpsla.SecondFollowUp, evalcsla.SecondFollowUp, @DefaultSecondFollowUp) AS EvaluationSlaSecondFollowUp,\n    dbo.GetTat(\n        ISNULL(mc.ResubmissionDate, mc.DateSubmitted),\n        mc.EvaluationDate,\n        c.ClientId\n    ) AS EvaluationTat,\n\n    COALESCE(brpsla.FirstFollowUp, brcsla.FirstFollowUp, @DefaultBrokerReviewFollowUp) AS BrokerReviewSlaFirstFollowUp,\n    COALESCE(brpsla.SecondFollowUp, brcsla.SecondFollowUp, @DefaultBrokerReviewFollowUp) AS BrokerReviewSlaSecondFollowUp,\n    dbo.GetTat(\n        ISNULL(mc.ResubmissionDate, mc.DateSubmitted),\n        mc.BrokerReviewDate,\n        c.ClientId\n    ) AS BrokerReviewTat,\n    ISNULL(mc.IsOriginalsAwaited, 0) AS OriginalsAwaited,\n    mc.DateClosed,\n    CASE\n        WHEN dbo.GetTat(ISNULL(mc.ResubmissionDate, mc.DateSubmitted), mc.SettlementDate, c.ClientId) > COALESCE(settlpsla.FirstFollowUp, settlcsla.FirstFollowUp, @DefaultFirstFollowUp)\n        THEN CASE\n            WHEN dbo.GetTat(ISNULL(mc.ResubmissionDate, mc.DateSubmitted), mc.SettlementDate, c.ClientId) > COALESCE(settlpsla.SecondFollowUp, settlcsla.SecondFollowUp, @DefaultSecondFollowUp)\n                THEN 'Red'\n            ELSE 'Yellow'\n        END\n        ELSE 'Green'\n    END AS SLAColor,\n\n    CASE\n        WHEN dbo.GetTat(ISNULL(mc.ResubmissionDate, mc.DateSubmitted), mc.SettlementDate, c.ClientId) > COALESCE(settlpsla.SecondFollowUp, settlcsla.SecondFollowUp, @DefaultSecondFollowUp)\n            THEN 0\n        ELSE 1\n    END AS IsTransactionSLA\nFROM dbo.MemberPolicyCategory mpc\nINNER JOIN dbo.PolicyCategory pc ON mpc.PolicyCategoryId = pc.PolicyCategoryId\nINNER JOIN dbo.Category cat ON pc.CategoryId = cat.CategoryId\nINNER JOIN dbo.Policy p ON pc.PolicyId = p.PolicyId\nINNER JOIN dbo.MedicalClaim mc ON mpc.MemberPolicyCategoryId = mc.MemberPolicyCategoryId\nINNER JOIN dbo.WorkflowMedicalClaim wm ON mc.MedicalClaimId = wm.MedicalClaimId\nINNER JOIN dbo.Carrier cr ON p.CarrierId = cr.CarrierId\nINNER JOIN dbo.Client c ON p.ClientId = c.ClientId\nLEFT JOIN dbo.CarrierSLA settlcsla ON cr.CarrierId = settlcsla.CarrierId AND settlcsla.SLAProcessTypeId = 1  -- 1 = MedicalClaimSettlementSla\nLEFT JOIN dbo.PolicySLA settlpsla ON p.PolicyId = settlpsla.PolicyId AND settlpsla.SLAProcessTypeId = 1\nLEFT JOIN dbo.CarrierSLA evalcsla ON cr.CarrierId = evalcsla.CarrierId AND evalcsla.SLAProcessTypeId = 2  -- 2 = MedicalClaimEvaluationSla\nLEFT JOIN dbo.PolicySLA evalpsla ON p.PolicyId = evalpsla.PolicyId AND evalpsla.SLAProcessTypeId = 2\nLEFT JOIN dbo.CarrierSLA brcsla ON cr.CarrierId = brcsla.CarrierId AND brcsla.SLAProcessTypeId = 3  -- 3 = MedicalClaimBrokerReviewSla\nLEFT JOIN dbo.PolicySLA brpsla ON p.PolicyId = brpsla.PolicyId AND brpsla.SLAProcessTypeId = 3\nLEFT JOIN Workflow w ON wm.WorkflowId = w.WorkflowId\nWHERE mc.DateClosed IS NULL\nAND mc.IsDeleted = 0; ",
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": "IF OBJECT_ID('dbo.ClaimSLA', 'U') IS NOT NULL\n    TRUNCATE TABLE dbo.ClaimSLA;\n",
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"tableOption": "autoCreate",
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DS_SP_OnPrem_UAT",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DS_AzureSQLTable",
+								"type": "DatasetReference",
+								"parameters": {
+									"tableName": "ClaimSLA",
+									"SchemaName": "dbo"
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2025-04-15T09:35:00Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DS_MetadataTable')]",
+				"[concat(variables('factoryId'), '/datasets/DS_SP_OnPrem_UAT')]",
+				"[concat(variables('factoryId'), '/datasets/DS_AzureSQLTable')]",
+				"[concat(variables('factoryId'), '/datasets/DS_OnPremSQLTable_UAT')]",
+				"[concat(variables('factoryId'), '/linkedServices/LS_AzureSQLDB')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/DS_AzureSQLTable')]",
 			"type": "Microsoft.DataFactory/factories/datasets",
 			"apiVersion": "2018-06-01",
@@ -1583,7 +2874,6 @@
 				"type": "SqlServerTable",
 				"schema": [],
 				"typeProperties": {
-					"schema": "",
 					"table": {
 						"value": "@dataset().tableName",
 						"type": "Expression"
@@ -1592,6 +2882,35 @@
 			},
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/linkedServices/LS_OnPremSQL')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_OnPremSQLTable_UAT')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "LS_OnPremSQL_UAT",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"tableName": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"type": "SqlServerTable",
+				"schema": [],
+				"typeProperties": {
+					"schema": "",
+					"table": {
+						"value": "@dataset().tableName",
+						"type": "Expression"
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_OnPremSQL_UAT')]"
 			]
 		},
 		{
@@ -1610,6 +2929,24 @@
 			},
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/linkedServices/LS_OnPremSQL')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DS_SP_OnPrem_UAT')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "LS_OnPremSQL_UAT",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "SqlServerTable",
+				"schema": [],
+				"typeProperties": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/LS_OnPremSQL_UAT')]"
 			]
 		},
 		{
@@ -1700,6 +3037,34 @@
 					"password": {
 						"type": "SecureString",
 						"value": "[parameters('LS_OnPremSQL_password')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "IR-OnPrem",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/integrationRuntimes/IR-OnPrem')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/LS_OnPremSQL_UAT')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "SqlServer",
+				"typeProperties": {
+					"server": "[parameters('LS_OnPremSQL_UAT_properties_typeProperties_server')]",
+					"database": "[parameters('LS_OnPremSQL_UAT_properties_typeProperties_database')]",
+					"encrypt": "optional",
+					"trustServerCertificate": false,
+					"authenticationType": "SQL",
+					"userName": "[parameters('LS_OnPremSQL_UAT_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('LS_OnPremSQL_UAT_password')]"
 					}
 				},
 				"connectVia": {

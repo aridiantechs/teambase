@@ -19,6 +19,10 @@
 			"type": "secureString",
 			"metadata": "Secure string for 'password' of 'LS_OnPremSQL'"
 		},
+		"LS_OnPremSQL_UAT_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'LS_OnPremSQL_UAT'"
+		},
 		"LS_ADLS_DEV_Bronze_properties_typeProperties_url": {
 			"type": "string",
 			"defaultValue": "https://teambase.dfs.core.windows.net/"
@@ -44,6 +48,18 @@
 			"defaultValue": "DemoWillis_2025-03-10_12-20"
 		},
 		"LS_OnPremSQL_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "tayyab"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "DESKTOP-BO7RKUV"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "benefitnet-lifecare-2025-04-28-14-00"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_userName": {
 			"type": "string",
 			"defaultValue": "tayyab"
 		},
@@ -83,6 +99,9 @@
 					"LS_OnPremSQL_password": {
 						"value": "[parameters('LS_OnPremSQL_password')]"
 					},
+					"LS_OnPremSQL_UAT_password": {
+						"value": "[parameters('LS_OnPremSQL_UAT_password')]"
+					},
 					"LS_ADLS_DEV_Bronze_properties_typeProperties_url": {
 						"value": "[parameters('LS_ADLS_DEV_Bronze_properties_typeProperties_url')]"
 					},
@@ -103,6 +122,15 @@
 					},
 					"LS_OnPremSQL_properties_typeProperties_userName": {
 						"value": "[parameters('LS_OnPremSQL_properties_typeProperties_userName')]"
+					},
+					"LS_OnPremSQL_UAT_properties_typeProperties_server": {
+						"value": "[parameters('LS_OnPremSQL_UAT_properties_typeProperties_server')]"
+					},
+					"LS_OnPremSQL_UAT_properties_typeProperties_database": {
+						"value": "[parameters('LS_OnPremSQL_UAT_properties_typeProperties_database')]"
+					},
+					"LS_OnPremSQL_UAT_properties_typeProperties_userName": {
+						"value": "[parameters('LS_OnPremSQL_UAT_properties_typeProperties_userName')]"
 					}
 				}
 			},

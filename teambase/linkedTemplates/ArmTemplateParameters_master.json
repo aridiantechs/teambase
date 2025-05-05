@@ -14,6 +14,9 @@
 		"LS_OnPremSQL_password": {
 			"value": ""
 		},
+		"LS_OnPremSQL_UAT_password": {
+			"value": ""
+		},
 		"LS_ADLS_DEV_Bronze_properties_typeProperties_url": {
 			"value": "https://teambase.dfs.core.windows.net/"
 		},
@@ -33,6 +36,15 @@
 			"value": "DemoWillis_2025-03-10_12-20"
 		},
 		"LS_OnPremSQL_properties_typeProperties_userName": {
+			"value": "tayyab"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_server": {
+			"value": "DESKTOP-BO7RKUV"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_database": {
+			"value": "benefitnet-lifecare-2025-04-28-14-00"
+		},
+		"LS_OnPremSQL_UAT_properties_typeProperties_userName": {
 			"value": "tayyab"
 		},
 		"containerUri": {
